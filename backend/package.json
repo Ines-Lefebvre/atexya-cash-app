@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "encore.dev": "^1.50.4",
+    "jsonwebtoken": "^9.0.2",
     "stripe": "^17.7.0"
   },
   "devDependencies": {

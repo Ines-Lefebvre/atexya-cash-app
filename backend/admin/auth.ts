@@ -2,21 +2,57 @@ import { api, APIError, Cookie, Gateway, Header } from "encore.dev/api";
 import { secret } from "encore.dev/config";
 import log from "encore.dev/log";
 import { authHandler } from "encore.dev/auth";
+import jwt from "jsonwebtoken";
 
 // Secrets for admin credentials
 const ADMIN_USER = secret("ADMIN_USER");
 const ADMIN_PASSWORD = secret("ADMIN_PASSWORD");
-const JWT_SECRET = secret("JWT_SECRET"); // For signing session tokens
+const JWT_SECRET = secret("JWT_SECRET");
 
-// A simple, insecure simulation of JWT. In production, use a library like 'jsonwebtoken'.
-const createToken = (payload: object) => Buffer.from(JSON.stringify(payload) + '.' + JWT_SECRET()).toString('base64');
-const verifyToken = (token: string) => {
+interface JWTPayload {
+  user: string;
+  iat: number;
+  exp: number;
+}
+
+const createToken = (payload: { user: string }): string => {
+  const jwtSecret = JWT_SECRET();
+  if (!jwtSecret || jwtSecret.trim() === "") {
+    throw new Error("JWT_SECRET is not configured");
+  }
+  
+  return jwt.sign(
+    {
+      ...payload,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + (12 * 60 * 60) // 12 hours
+    },
+    jwtSecret,
+    { algorithm: 'HS256' }
+  );
+};
+
+const verifyToken = (token: string): JWTPayload | null => {
   try {
-    const decoded = Buffer.from(token, 'base64').toString('ascii');
-    const [payloadStr, secret] = decoded.split('.');
-    if (secret !== JWT_SECRET()) return null;
-    return JSON.parse(payloadStr);
-  } catch {
+    const jwtSecret = JWT_SECRET();
+    if (!jwtSecret || jwtSecret.trim() === "") {
+      log.error("JWT_SECRET is not configured");
+      return null;
+    }
+    
+    const payload = jwt.verify(token, jwtSecret, { 
+      algorithms: ['HS256']
+    }) as JWTPayload;
+    
+    // Vérification additionnelle de l'expiration
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      log.warn("Token expired", { exp: payload.exp, now: Math.floor(Date.now() / 1000) });
+      return null;
+    }
+    
+    return payload;
+  } catch (error: any) {
+    log.warn("JWT verification failed", { error: error.message });
     return null;
   }
 };
@@ -36,13 +72,17 @@ export const login = api<LoginRequest, LoginResponse>(
   { expose: true, method: "POST", path: "/admin/login" },
   async (params) => {
     log.info("Admin login attempt", { username: params.username });
+    
     if (params.username === ADMIN_USER() && params.password === ADMIN_PASSWORD()) {
-      const token = createToken({ user: 'admin', iat: Date.now() });
+      const token = createToken({ user: 'admin' });
+      
+      log.info("Admin login successful", { username: params.username });
+      
       return {
         success: true,
         session: {
           value: token,
-          expires: new Date(Date.now() + 30 * 60 * 1000), // 30 minute session
+          expires: new Date(Date.now() + 12 * 60 * 60 * 1000), // 12 hours
           httpOnly: true,
           secure: true,
           sameSite: "Strict",
@@ -50,6 +90,8 @@ export const login = api<LoginRequest, LoginResponse>(
         },
       };
     }
+    
+    log.warn("Admin login failed", { username: params.username });
     throw APIError.unauthenticated("Invalid credentials");
   }
 );
@@ -88,13 +130,22 @@ export interface AdminAuthData {
 
 export const adminAuth = authHandler<AdminAuthParams, AdminAuthData>(async (params) => {
   const token = params.session?.value;
+  
   if (!token) {
-    throw APIError.unauthenticated("Missing session token");
+    log.warn("Admin auth failed: missing token");
+    throw APIError.unauthenticated("Session expirée ou manquante");
   }
+  
   const payload = verifyToken(token);
+  
   if (!payload || payload.user !== 'admin') {
-    throw APIError.unauthenticated("Invalid session token");
+    log.warn("Admin auth failed: invalid token or user", { 
+      hasPayload: !!payload,
+      user: payload?.user 
+    });
+    throw APIError.unauthenticated("Session invalide ou expirée");
   }
+  
   return { userID: 'admin' };
 });
 
