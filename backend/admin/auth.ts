@@ -86,7 +86,7 @@ export interface AdminAuthData {
   userID: string;
 }
 
-const adminAuth = authHandler<AdminAuthParams, AdminAuthData>(async (params) => {
+export const adminAuth = authHandler<AdminAuthParams, AdminAuthData>(async (params) => {
   const token = params.session?.value;
   if (!token) {
     throw APIError.unauthenticated("Missing session token");

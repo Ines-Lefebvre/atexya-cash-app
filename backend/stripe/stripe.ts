@@ -5,7 +5,7 @@ import log from "encore.dev/log";
 import Stripe from "stripe";
 
 const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
-const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2024-06-20" });
+const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
 
 // Base de données pour les sessions Stripe
 export const stripeDB = new SQLDatabase("stripe", {
@@ -229,10 +229,10 @@ export const getSession = api<GetSessionRequest, GetSessionResponse>(
       return {
         sessionId: session.id,
         status: session.status || 'unknown',
-        customerEmail: session.customer_details?.email,
-        amountTotal: session.amount_total,
-        currency: session.currency,
-        paymentStatus: session.payment_status,
+        customerEmail: session.customer_details?.email ?? undefined,
+        amountTotal: session.amount_total ?? undefined,
+        currency: session.currency ?? undefined,
+        paymentStatus: session.payment_status ?? undefined,
         metadata: session.metadata || {}
       };
 
@@ -280,7 +280,7 @@ export const createRefund = api<RefundRequest, RefundResponse>(
       return {
         refundId: refund.id,
         amount: refund.amount / 100,
-        status: refund.status
+        status: refund.status ?? 'unknown'
       };
 
     } catch (error: any) {

@@ -6,7 +6,7 @@ import { atexya } from "~encore/clients";
 
 const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = secret("STRIPE_WEBHOOK_SECRET");
-const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2024-06-20" });
+const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
 
 interface WebhookRequest {
   signature: Header<"stripe-signature">;
