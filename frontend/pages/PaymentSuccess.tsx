@@ -22,20 +22,18 @@ export default function PaymentSuccess() {
       }
 
       try {
-        // Récupérer les détails de la session Stripe
+        // Récupérer les détails de la session Stripe (statut uniquement)
         const sessionResponse = await backend.stripe.getSession({ sessionId });
         setSessionDetails(sessionResponse);
 
-        // Récupérer les détails du contrat si disponible
-        if (sessionResponse.metadata?.contract_id) {
-          try {
-            const contractResponse = await backend.atexya.getContract({ 
-              contract_id: sessionResponse.metadata.contract_id 
-            });
-            setContractDetails(contractResponse);
-          } catch (contractError) {
-            console.warn('Contract not found, but payment session is valid:', contractError);
-          }
+        // Récupérer les détails du contrat via le sessionId
+        try {
+          const contractResponse = await backend.atexya.getContract({ 
+            stripe_session_id: sessionId
+          });
+          setContractDetails(contractResponse);
+        } catch (contractError) {
+          console.warn('Contract not found:', contractError);
         }
 
         if (sessionResponse.status === 'complete' && sessionResponse.paymentStatus === 'paid') {
@@ -126,20 +124,19 @@ export default function PaymentSuccess() {
                 Détails de votre souscription
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-green-700">
-                <div><strong>Email :</strong> {sessionDetails.customerEmail}</div>
                 <div><strong>Montant payé :</strong> {formatCurrency(sessionDetails.amountTotal || 0)}</div>
-                {sessionDetails.metadata && (
+                <div><strong>Statut :</strong> {sessionDetails.paymentStatus === 'paid' ? 'Payé' : 'En attente'}</div>
+                {contractDetails && (
                   <>
-                    <div><strong>Entreprise :</strong> {sessionDetails.metadata.company_name}</div>
-                    <div><strong>SIREN :</strong> {sessionDetails.metadata.siren}</div>
-                    <div><strong>Offre :</strong> {getProductTypeLabel(sessionDetails.metadata.product_type)}
-                      {sessionDetails.metadata.product_type === 'premium' && 
+                    <div><strong>Entreprise :</strong> {contractDetails.company_name}</div>
+                    <div><strong>SIREN :</strong> {contractDetails.siren}</div>
+                    <div><strong>Offre :</strong> {getProductTypeLabel(contractDetails.contract_type)}
+                      {contractDetails.contract_type === 'premium' && 
                         <Badge className="ml-2 bg-[#c19a5f] text-white">+20% garantie</Badge>
                       }
                     </div>
-                    <div><strong>Paiement :</strong> {getPaymentTypeLabel(sessionDetails.metadata.payment_type)}</div>
-                    <div><strong>Garantie :</strong> {parseInt(sessionDetails.metadata.garantie_amount).toLocaleString()}€</div>
-                    <div><strong>CTN :</strong> {sessionDetails.metadata.secteur_ctn}</div>
+                    <div><strong>Paiement :</strong> {getPaymentTypeLabel(contractDetails.payment_type || 'annual')}</div>
+                    <div><strong>Garantie :</strong> {contractDetails.garantie_amount?.toLocaleString()}€</div>
                   </>
                 )}
               </div>
@@ -174,16 +171,16 @@ export default function PaymentSuccess() {
 
           <Card>
             <CardContent className="p-6 text-center">
-              {sessionDetails?.metadata?.payment_type === 'monthly' ? (
+              {contractDetails?.payment_type === 'monthly' ? (
                 <Calendar className="w-12 h-12 mx-auto text-[#c19a5f] mb-4" />
               ) : (
                 <Mail className="w-12 h-12 mx-auto text-[#c19a5f] mb-4" />
               )}
               <h3 className="text-lg font-bold text-[#0f2f47] mb-2 font-astaneh">
-                {sessionDetails?.metadata?.payment_type === 'monthly' ? 'Renouvellement' : 'Support client'}
+                {contractDetails?.payment_type === 'monthly' ? 'Renouvellement' : 'Support client'}
               </h3>
               <p className="text-gray-600 text-sm">
-                {sessionDetails?.metadata?.payment_type === 'monthly' 
+                {contractDetails?.payment_type === 'monthly' 
                   ? 'Prélèvement automatique mensuel'
                   : 'Assistance disponible 24h/24'
                 }
@@ -192,7 +189,7 @@ export default function PaymentSuccess() {
           </Card>
         </div>
 
-        {sessionDetails?.metadata?.payment_type === 'monthly' && (
+        {contractDetails?.payment_type === 'monthly' && (
           <Card className="border-blue-500 bg-blue-50 my-8">
             <CardContent className="p-6 text-center">
               <h3 className="text-lg font-bold text-blue-800 mb-2 font-astaneh">
@@ -216,7 +213,7 @@ export default function PaymentSuccess() {
               <p>1. Vous recevrez un email de confirmation avec votre facture</p>
               <p>2. Votre attestation d'assurance sera envoyée sous 24h</p>
               <p>3. Conservez précieusement ces documents</p>
-              {sessionDetails?.metadata?.broker_code && (
+              {contractDetails?.broker_code && (
                 <p>4. Votre courtier sera notifié de la souscription</p>
               )}
             </div>

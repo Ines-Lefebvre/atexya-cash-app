@@ -212,34 +212,37 @@ interface GetSessionRequest {
 interface GetSessionResponse {
   sessionId: string;
   status: string;
-  customerEmail?: string;
+  paymentStatus?: string;
   amountTotal?: number;
   currency?: string;
-  paymentStatus?: string;
-  metadata?: Record<string, any>;
 }
 
-// Récupère les détails d'une session Stripe
+// Récupère les détails d'une session Stripe (statut uniquement, pas de métadonnées)
 export const getSession = api<GetSessionRequest, GetSessionResponse>(
   { expose: true, method: "GET", path: "/stripe/session/:sessionId" },
   async (params) => {
     try {
-      const session = await stripe.checkout.sessions.retrieve(params.sessionId, {
-        expand: ['customer', 'subscription', 'payment_intent']
+      const session = await stripe.checkout.sessions.retrieve(params.sessionId);
+
+      // Ne retourner QUE le statut du paiement, pas de métadonnées ni d'infos client
+      log.info("Public session status check", { 
+        sessionId: session.id,
+        status: session.status
       });
 
       return {
         sessionId: session.id,
         status: session.status || 'unknown',
-        customerEmail: session.customer_details?.email ?? undefined,
-        amountTotal: session.amount_total ?? undefined,
-        currency: session.currency ?? undefined,
         paymentStatus: session.payment_status ?? undefined,
-        metadata: session.metadata || {}
+        amountTotal: session.amount_total ?? undefined,
+        currency: session.currency ?? undefined
       };
 
     } catch (error: any) {
-      log.error("Error retrieving Stripe session", { error: error.message, sessionId: params.sessionId });
+      log.error("Error retrieving Stripe session", { 
+        error: error.message, 
+        sessionId: params.sessionId
+      });
       throw APIError.notFound("Session non trouvée");
     }
   }
