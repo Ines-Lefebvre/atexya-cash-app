@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Loader2, FileText, Mail, Download, Calendar } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, FileText, Mail, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import backend from '~backend/client';
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [sessionDetails, setSessionDetails] = useState<any>(null);
-  const [contractDetails, setContractDetails] = useState<any>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
 
   useEffect(() => {
     const verifyPayment = async () => {
@@ -22,22 +20,12 @@ export default function PaymentSuccess() {
       }
 
       try {
-        // Récupérer les détails de la session Stripe (statut uniquement)
+        // Récupérer uniquement le statut de la session Stripe
         const sessionResponse = await backend.stripe.getSession({ sessionId });
-        setSessionDetails(sessionResponse);
-
-        // Récupérer les détails du contrat via le sessionId
-        try {
-          const contractResponse = await backend.atexya.getContract({ 
-            stripe_session_id: sessionId
-          });
-          setContractDetails(contractResponse);
-        } catch (contractError) {
-          console.warn('Contract not found:', contractError);
-        }
 
         if (sessionResponse.status === 'complete' && sessionResponse.paymentStatus === 'paid') {
           setStatus('success');
+          setPaymentAmount(sessionResponse.amountTotal || 0);
         } else {
           setStatus('error');
         }
@@ -56,14 +44,6 @@ export default function PaymentSuccess() {
       currency: 'EUR',
       minimumFractionDigits: 2
     }).format(amountCents / 100);
-  };
-
-  const getPaymentTypeLabel = (type: string) => {
-    return type === 'monthly' ? 'Mensuel' : 'Annuel';
-  };
-
-  const getProductTypeLabel = (type: string) => {
-    return type === 'premium' ? 'Premium' : 'Standard';
   };
 
   const renderContent = () => {
@@ -117,32 +97,17 @@ export default function PaymentSuccess() {
           Merci pour votre confiance. Votre contrat d'assurance est maintenant actif.
         </p>
 
-        {sessionDetails && (
-          <Card className="border-green-500 bg-green-50 my-8 text-left">
-            <CardContent className="p-6">
-              <h3 className="text-lg font-bold text-green-800 mb-4 font-astaneh">
-                Détails de votre souscription
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-green-700">
-                <div><strong>Montant payé :</strong> {formatCurrency(sessionDetails.amountTotal || 0)}</div>
-                <div><strong>Statut :</strong> {sessionDetails.paymentStatus === 'paid' ? 'Payé' : 'En attente'}</div>
-                {contractDetails && (
-                  <>
-                    <div><strong>Entreprise :</strong> {contractDetails.company_name}</div>
-                    <div><strong>SIREN :</strong> {contractDetails.siren}</div>
-                    <div><strong>Offre :</strong> {getProductTypeLabel(contractDetails.contract_type)}
-                      {contractDetails.contract_type === 'premium' && 
-                        <Badge className="ml-2 bg-[#c19a5f] text-white">+20% garantie</Badge>
-                      }
-                    </div>
-                    <div><strong>Paiement :</strong> {getPaymentTypeLabel(contractDetails.payment_type || 'annual')}</div>
-                    <div><strong>Garantie :</strong> {contractDetails.garantie_amount?.toLocaleString()}€</div>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <Card className="border-green-500 bg-green-50 my-8 text-left">
+          <CardContent className="p-6">
+            <h3 className="text-lg font-bold text-green-800 mb-4 font-astaneh">
+              Confirmation de paiement
+            </h3>
+            <div className="grid grid-cols-1 gap-4 text-sm text-green-700">
+              <div><strong>Montant payé :</strong> {formatCurrency(paymentAmount)}</div>
+              <div><strong>Statut :</strong> Payé avec succès</div>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-8">
           <Card>
@@ -171,38 +136,16 @@ export default function PaymentSuccess() {
 
           <Card>
             <CardContent className="p-6 text-center">
-              {contractDetails?.payment_type === 'monthly' ? (
-                <Calendar className="w-12 h-12 mx-auto text-[#c19a5f] mb-4" />
-              ) : (
-                <Mail className="w-12 h-12 mx-auto text-[#c19a5f] mb-4" />
-              )}
+              <Mail className="w-12 h-12 mx-auto text-[#c19a5f] mb-4" />
               <h3 className="text-lg font-bold text-[#0f2f47] mb-2 font-astaneh">
-                {contractDetails?.payment_type === 'monthly' ? 'Renouvellement' : 'Support client'}
+                Support client
               </h3>
               <p className="text-gray-600 text-sm">
-                {contractDetails?.payment_type === 'monthly' 
-                  ? 'Prélèvement automatique mensuel'
-                  : 'Assistance disponible 24h/24'
-                }
+                Assistance disponible 24h/24
               </p>
             </CardContent>
           </Card>
         </div>
-
-        {contractDetails?.payment_type === 'monthly' && (
-          <Card className="border-blue-500 bg-blue-50 my-8">
-            <CardContent className="p-6 text-center">
-              <h3 className="text-lg font-bold text-blue-800 mb-2 font-astaneh">
-                Paiement mensuel activé
-              </h3>
-              <div className="text-blue-700 text-sm space-y-1">
-                <p>Votre abonnement mensuel a été activé avec succès</p>
-                <p>Prochaine échéance : {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR')}</p>
-                <p>Vous pouvez annuler à tout moment depuis votre espace client</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         <Card className="border-green-500 bg-green-50 my-8">
           <CardContent className="p-6 text-center">
@@ -213,9 +156,6 @@ export default function PaymentSuccess() {
               <p>1. Vous recevrez un email de confirmation avec votre facture</p>
               <p>2. Votre attestation d'assurance sera envoyée sous 24h</p>
               <p>3. Conservez précieusement ces documents</p>
-              {contractDetails?.broker_code && (
-                <p>4. Votre courtier sera notifié de la souscription</p>
-              )}
             </div>
           </CardContent>
         </Card>
