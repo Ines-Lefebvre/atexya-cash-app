@@ -1,8 +1,8 @@
 import { api, APIError, Cookie, Gateway, Header } from "encore.dev/api";
 import { secret } from "encore.dev/config";
-import log from "encore.dev/log";
 import { authHandler } from "encore.dev/auth";
 import jwt from "jsonwebtoken";
+import { safeLog } from "../utils/safeLog";
 
 // Secrets for admin credentials
 const ADMIN_USER = secret("ADMIN_USER");
@@ -36,7 +36,7 @@ const verifyToken = (token: string): JWTPayload | null => {
   try {
     const jwtSecret = JWT_SECRET();
     if (!jwtSecret || jwtSecret.trim() === "") {
-      log.error("JWT_SECRET is not configured");
+      safeLog.error("JWT_SECRET is not configured");
       return null;
     }
     
@@ -46,13 +46,13 @@ const verifyToken = (token: string): JWTPayload | null => {
     
     // Vérification additionnelle de l'expiration
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      log.warn("Token expired", { exp: payload.exp, now: Math.floor(Date.now() / 1000) });
+      safeLog.warn("Token expired", { exp: payload.exp, now: Math.floor(Date.now() / 1000) });
       return null;
     }
     
     return payload;
   } catch (error: any) {
-    log.warn("JWT verification failed", { error: error.message });
+    safeLog.warn("JWT verification failed", { error: error.message });
     return null;
   }
 };
@@ -71,12 +71,12 @@ interface LoginResponse {
 export const login = api<LoginRequest, LoginResponse>(
   { expose: true, method: "POST", path: "/admin/login" },
   async (params) => {
-    log.info("Admin login attempt", { username: params.username });
+    safeLog.info("Admin login attempt", { username: params.username });
     
     if (params.username === ADMIN_USER() && params.password === ADMIN_PASSWORD()) {
       const token = createToken({ user: 'admin' });
       
-      log.info("Admin login successful", { username: params.username });
+      safeLog.info("Admin login successful", { username: params.username });
       
       return {
         success: true,
@@ -91,7 +91,7 @@ export const login = api<LoginRequest, LoginResponse>(
       };
     }
     
-    log.warn("Admin login failed", { username: params.username });
+    safeLog.warn("Admin login failed", { username: params.username });
     throw APIError.unauthenticated("Invalid credentials");
   }
 );
@@ -132,14 +132,14 @@ export const adminAuth = authHandler<AdminAuthParams, AdminAuthData>(async (para
   const token = params.session?.value;
   
   if (!token) {
-    log.warn("Admin auth failed: missing token");
+    safeLog.warn("Admin auth failed: missing token");
     throw APIError.unauthenticated("Session expirée ou manquante");
   }
   
   const payload = verifyToken(token);
   
   if (!payload || payload.user !== 'admin') {
-    log.warn("Admin auth failed: invalid token or user", { 
+    safeLog.warn("Admin auth failed: invalid token or user", { 
       hasPayload: !!payload,
       user: payload?.user 
     });

@@ -1,8 +1,8 @@
 import { api, APIError } from "encore.dev/api";
 import { SQLDatabase } from "encore.dev/storage/sqldb";
-import log from "encore.dev/log";
 import { getAuthData } from "~encore/auth";
 import type { AdminAuthData } from "../admin/auth";
+import { safeLog, hashValue } from "../utils/safeLog";
 
 // Base de données pour les contrats
 export const contractsDB = new SQLDatabase("contracts", {
@@ -136,19 +136,19 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
         )
       `;
 
-      log.info("Contract created successfully", { 
+      safeLog.info("Contract created successfully", { 
         contractId,
-        siren: params.siren,
+        sirenHash: hashValue(params.siren),
         amount: params.premium_ttc,
         paymentType: params.payment_type,
-        stripeSessionId: params.stripe_session_id,
+        stripeSessionIdHash: params.stripe_session_id ? hashValue(params.stripe_session_id) : undefined,
         brokerCommission: brokerCommissionAmount
       });
 
       return { contract_id: contractId };
 
     } catch (error: any) {
-      log.error("Error creating contract", { error: error.message, params });
+      safeLog.error("Error creating contract", { error: error.message });
       throw APIError.internal("Impossible de créer le contrat");
     }
   }
@@ -203,16 +203,16 @@ export const updateContractStatus = api<UpdateContractStatusRequest, { success: 
         ...values
       );
 
-      log.info("Contract status updated", {
+      safeLog.info("Contract status updated", {
         contractId: params.contract_id,
         newStatus: params.payment_status,
-        stripeSessionId: params.stripe_session_id
+        stripeSessionIdHash: params.stripe_session_id ? hashValue(params.stripe_session_id) : undefined
       });
 
       return { success: true };
 
     } catch (error: any) {
-      log.error("Error updating contract status", { 
+      safeLog.error("Error updating contract status", { 
         error: error.message, 
         contractId: params.contract_id 
       });
@@ -264,12 +264,12 @@ export const getContract = api<GetContractRequest, Contract>(
 
       // Si admin, retourner toutes les données
       if (isAdmin()) {
-        log.info("Admin accessed contract", { contractId: contract.id });
+        safeLog.info("Admin accessed contract", { contractId: contract.id });
         return fullContract;
       }
 
       // Sinon, sanitiser les données sensibles
-      log.info("Non-admin accessed contract (sanitized)", { contractId: contract.id });
+      safeLog.info("Non-admin accessed contract (sanitized)", { contractId: contract.id });
       
       // Retourner le contrat avec les données personnelles masquées
       return {
@@ -285,7 +285,7 @@ export const getContract = api<GetContractRequest, Contract>(
       } as Contract;
 
     } catch (error: any) {
-      log.error("Error getting contract", { error: error.message, params });
+      safeLog.error("Error getting contract", { error: error.message });
       if (error instanceof APIError) {
         throw error;
       }
@@ -316,7 +316,7 @@ export const listContracts = api<ListContractsRequest, ListContractsResponse>(
   async (params) => {
     // Vérifier que l'utilisateur est admin
     if (!isAdmin()) {
-      log.warn("Unauthorized access attempt to listContracts");
+      safeLog.warn("Unauthorized access attempt to listContracts");
       throw APIError.permissionDenied("Accès refusé : seuls les administrateurs peuvent lister les contrats");
     }
 
@@ -374,7 +374,7 @@ export const listContracts = api<ListContractsRequest, ListContractsResponse>(
         metadata: JSON.parse(contract.metadata || '{}')
       }));
 
-      log.info("Admin listed contracts", { total, limit, offset });
+      safeLog.info("Admin listed contracts", { total, limit, offset });
 
       return {
         contracts: formattedContracts,
@@ -383,7 +383,7 @@ export const listContracts = api<ListContractsRequest, ListContractsResponse>(
       };
 
     } catch (error: any) {
-      log.error("Error listing contracts", { error: error.message, params });
+      safeLog.error("Error listing contracts", { error: error.message });
       throw APIError.internal("Impossible de lister les contrats");
     }
   }
@@ -419,7 +419,7 @@ export const getBrokerCommissionSummary = api<BrokerCommissionSummaryRequest, Br
   async (params) => {
     // Vérifier que l'utilisateur est admin
     if (!isAdmin()) {
-      log.warn("Unauthorized access attempt to getBrokerCommissionSummary", { 
+      safeLog.warn("Unauthorized access attempt to getBrokerCommissionSummary", { 
         brokerCode: params.broker_code 
       });
       throw APIError.permissionDenied("Accès refusé : seuls les administrateurs peuvent consulter les commissions");
@@ -479,7 +479,7 @@ export const getBrokerCommissionSummary = api<BrokerCommissionSummaryRequest, Br
         };
       });
 
-      log.info("Admin accessed broker commission summary", { 
+      safeLog.info("Admin accessed broker commission summary", { 
         brokerCode: params.broker_code,
         totalContracts: contracts.length 
       });
@@ -494,9 +494,8 @@ export const getBrokerCommissionSummary = api<BrokerCommissionSummaryRequest, Br
       };
 
     } catch (error: any) {
-      log.error("Error getting broker commission summary", { 
-        error: error.message, 
-        brokerCode: params.broker_code 
+      safeLog.error("Error getting broker commission summary", { 
+        error: error.message
       });
       throw APIError.internal("Impossible de récupérer le résumé des commissions");
     }

@@ -1,10 +1,10 @@
 import { api, APIError } from "encore.dev/api";
 import { secret } from "encore.dev/config";
 import { SQLDatabase } from "encore.dev/storage/sqldb";
-import log from "encore.dev/log";
 import Stripe from "stripe";
 import { getAuthData } from "~encore/auth";
 import type { AdminAuthData } from "../admin/auth";
+import { safeLog, hashValue } from "../utils/safeLog";
 
 const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
 const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
@@ -59,8 +59,8 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
       const basePrice = productType === 'premium' ? quoteData.pricePremium : quoteData.priceStandard;
       const finalPrice = paymentType === 'monthly' ? Math.round((basePrice * 1.20) / 12) : basePrice;
 
-      log.info("Creating Stripe payment session", {
-        companyName: quoteData.companyName,
+      safeLog.info("Creating Stripe payment session", {
+        sirenHash: hashValue(quoteData.sirenNumber),
         paymentType,
         productType,
         basePrice,
@@ -186,9 +186,9 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         )
       `;
 
-      log.info("Stripe session created successfully", {
+      safeLog.info("Stripe session created successfully", {
         sessionId: session.id,
-        customerId: customer.id,
+        customerIdHash: hashValue(customer.id),
         amount: session.amount_total
       });
 
@@ -199,7 +199,7 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
       };
 
     } catch (error: any) {
-      log.error("Error creating Stripe session", { error: error.message });
+      safeLog.error("Error creating Stripe session", { error: error.message });
       throw APIError.internal("Impossible de créer la session de paiement");
     }
   }
@@ -225,7 +225,7 @@ export const getSession = api<GetSessionRequest, GetSessionResponse>(
       const session = await stripe.checkout.sessions.retrieve(params.sessionId);
 
       // Ne retourner QUE le statut du paiement, pas de métadonnées ni d'infos client
-      log.info("Public session status check", { 
+      safeLog.info("Public session status check", { 
         sessionId: session.id,
         status: session.status
       });
@@ -239,7 +239,7 @@ export const getSession = api<GetSessionRequest, GetSessionResponse>(
       };
 
     } catch (error: any) {
-      log.error("Error retrieving Stripe session", { 
+      safeLog.error("Error retrieving Stripe session", { 
         error: error.message, 
         sessionId: params.sessionId
       });
@@ -267,7 +267,7 @@ export const createRefund = api<RefundRequest, RefundResponse>(
     const authData = getAuthData()! as AdminAuthData;
     
     if (!authData || authData.userID !== 'admin') {
-      log.warn("Unauthorized refund attempt", { userID: authData?.userID });
+      safeLog.warn("Unauthorized refund attempt", { userID: authData?.userID });
       throw APIError.permissionDenied("Accès refusé : seuls les administrateurs peuvent créer des remboursements");
     }
 
@@ -287,10 +287,10 @@ export const createRefund = api<RefundRequest, RefundResponse>(
         idempotencyKey
       });
 
-      log.info("Refund created by admin", {
+      safeLog.info("Refund created by admin", {
         refundId: refund.id,
         amount: refund.amount,
-        paymentIntentId: params.paymentIntentId,
+        paymentIntentIdHash: hashValue(params.paymentIntentId),
         adminId: authData.userID,
         idempotencyKey
       });
@@ -302,9 +302,9 @@ export const createRefund = api<RefundRequest, RefundResponse>(
       };
 
     } catch (error: any) {
-      log.error("Error creating refund", { 
+      safeLog.error("Error creating refund", { 
         error: error.message, 
-        paymentIntentId: params.paymentIntentId,
+        paymentIntentIdHash: hashValue(params.paymentIntentId),
         adminId: authData.userID
       });
       throw APIError.internal("Impossible de créer le remboursement");

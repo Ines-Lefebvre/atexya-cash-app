@@ -1,6 +1,6 @@
 import { api, APIError } from "encore.dev/api";
 import { secret } from "encore.dev/config";
-import log from "encore.dev/log";
+import { safeLog, hashValue } from "../utils/safeLog";
 
 const PAPPERS_API_KEY = secret("PAPPERS_API_KEY");
 
@@ -65,11 +65,11 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
     try {
       const apiKey = PAPPERS_API_KEY();
       
-      log.info("Searching company with SIREN", { siren: params.siren, hasApiKey: !!apiKey });
+      safeLog.info("Searching company with SIREN", { sirenHash: hashValue(params.siren), hasApiKey: !!apiKey });
       
       // Si pas de clé API, on force le mode dégradé
       if (!apiKey || apiKey.trim() === "") {
-        log.warn("PAPPERS_API_KEY secret is not set. Falling back to degraded mode.");
+        safeLog.warn("PAPPERS_API_KEY secret is not set. Falling back to degraded mode.");
         return {
           company_data: { 
             denomination: "Société SIREN " + params.siren, 
@@ -93,14 +93,14 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
 
       // Validation du SIREN
       if (!/^\d{9}$/.test(params.siren)) {
-        log.error("Invalid SIREN format", { siren: params.siren });
+        safeLog.error("Invalid SIREN format", { sirenHash: hashValue(params.siren) });
         throw APIError.invalidArgument("Le SIREN doit contenir exactement 9 chiffres");
       }
 
       // URL corrigée - utilisation de l'endpoint principal
       const companyUrl = `https://api.pappers.fr/v2/entreprise?siren=${params.siren}&api_token=${apiKey}`;
       
-      log.info("Calling Pappers API", { url: companyUrl.replace(apiKey, 'HIDDEN') });
+      safeLog.info("Calling Pappers API", { url: companyUrl.replace(apiKey, 'HIDDEN') });
 
       // Appel principal pour récupérer les données de l'entreprise
       const companyResponse = await fetch(companyUrl, {
@@ -111,7 +111,7 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
         }
       });
 
-      log.info("Pappers API response received", { 
+      safeLog.info("Pappers API response received", { 
         status: companyResponse.status, 
         statusText: companyResponse.statusText,
         headers: Object.fromEntries(companyResponse.headers.entries())
@@ -119,7 +119,7 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
 
       if (!companyResponse.ok) {
         const errorText = await companyResponse.text();
-        log.error("Pappers company API request failed", { 
+        safeLog.error("Pappers company API request failed", { 
           status: companyResponse.status, 
           statusText: companyResponse.statusText,
           body: errorText,
@@ -142,18 +142,18 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
       }
 
       const responseText = await companyResponse.text();
-      log.info("Pappers API response body", { body: responseText.substring(0, 500) + "..." });
+      safeLog.info("Pappers API response body", { body: responseText.substring(0, 500) + "..." });
 
       let companyData: PappersCompanyData;
       try {
         companyData = JSON.parse(responseText);
       } catch (parseError) {
-        log.error("Failed to parse Pappers response", { error: parseError, body: responseText });
+        safeLog.error("Failed to parse Pappers response", { error: parseError, body: responseText });
         throw new Error("Invalid JSON response from Pappers API");
       }
 
       if (!companyData) {
-        log.error("Pappers API returned empty data for company.");
+        safeLog.error("Pappers API returned empty data for company.");
         return {
           company_data: { 
             denomination: "Société SIREN " + params.siren, 
@@ -168,9 +168,7 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
         };
       }
 
-      log.info("Pappers company data received", { 
-        denomination: companyData.denomination,
-        raison_sociale: companyData.raison_sociale,
+      safeLog.info("Pappers company data received", { 
         hasEtablissements: !!companyData.etablissements && companyData.etablissements.length > 0
       });
 
@@ -179,7 +177,7 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
       if (etablissements.length === 0) {
         try {
           const etablissementsUrl = `https://api.pappers.fr/v2/etablissements?siren=${params.siren}&api_token=${apiKey}`;
-          log.info("Fetching etablissements separately", { url: etablissementsUrl.replace(apiKey, 'HIDDEN') });
+          safeLog.info("Fetching etablissements separately", { url: etablissementsUrl.replace(apiKey, 'HIDDEN') });
           
           const etablissementsResponse = await fetch(etablissementsUrl, {
             method: 'GET',
@@ -193,14 +191,14 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
             const etablissementsText = await etablissementsResponse.text();
             const etablissementsData = JSON.parse(etablissementsText);
             etablissements = etablissementsData?.resultats || [];
-            log.info("Etablissements fetched separately", { count: etablissements.length });
+            safeLog.info("Etablissements fetched separately", { count: etablissements.length });
           } else {
-            log.warn("Pappers etablissements API request failed", { 
+            safeLog.warn("Pappers etablissements API request failed", { 
               status: etablissementsResponse.status 
             });
           }
         } catch (err: any) {
-          log.warn("Error fetching etablissements, continuing with company data only", { error: err.message });
+          safeLog.warn("Error fetching etablissements, continuing with company data only", { error: err.message });
         }
       }
 
@@ -223,8 +221,7 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
         salaries: etab.effectif || 25 // Valeur par défaut
       }));
 
-      log.info("Company search completed successfully", { 
-        denomination: company_info.denomination,
+      safeLog.info("Company search completed successfully", { 
         etablissements_count: formatted_etablissements.length
       });
 
@@ -235,10 +232,10 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
       };
 
     } catch (error: any) {
-      log.error("Error in searchCompany endpoint", { 
+      safeLog.error("Error in searchCompany endpoint", { 
         error: error.message, 
         stack: error.stack,
-        siren: params.siren
+        sirenHash: hashValue(params.siren)
       });
       
       // Mode dégradé complet en cas d'exception
