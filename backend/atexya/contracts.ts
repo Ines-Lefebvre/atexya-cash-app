@@ -1,6 +1,8 @@
 import { api, APIError } from "encore.dev/api";
 import { SQLDatabase } from "encore.dev/storage/sqldb";
 import log from "encore.dev/log";
+import { getAuthData } from "~encore/auth";
+import type { AdminAuthData } from "../admin/auth";
 
 // Base de données pour les contrats
 export const contractsDB = new SQLDatabase("contracts", {
@@ -35,6 +37,20 @@ interface Contract {
   metadata: Record<string, any>;
 }
 
+interface SanitizedContract {
+  id: string;
+  siren: string;
+  company_name: string;
+  contract_type: 'standard' | 'premium';
+  garantie_amount: number;
+  premium_ttc: number;
+  payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed' | 'cancelled';
+  payment_type?: 'annual' | 'monthly';
+  contract_start_date: string;
+  contract_end_date: string;
+  created_at: string;
+}
+
 interface CreateContractRequest {
   siren: string;
   company_name: string;
@@ -60,7 +76,34 @@ interface CreateContractResponse {
   contract_id: string;
 }
 
-// Crée un nouveau contrat
+// Fonction pour vérifier si l'utilisateur est admin
+const isAdmin = (): boolean => {
+  try {
+    const authData = getAuthData()! as AdminAuthData;
+    return authData?.userID === 'admin';
+  } catch {
+    return false;
+  }
+};
+
+// Fonction pour sanitiser les données personnelles
+const sanitizeContract = (contract: Contract): SanitizedContract => {
+  return {
+    id: contract.id,
+    siren: contract.siren,
+    company_name: contract.company_name,
+    contract_type: contract.contract_type,
+    garantie_amount: contract.garantie_amount,
+    premium_ttc: contract.premium_ttc,
+    payment_status: contract.payment_status,
+    payment_type: contract.payment_type,
+    contract_start_date: contract.contract_start_date,
+    contract_end_date: contract.contract_end_date,
+    created_at: contract.created_at
+  };
+};
+
+// Crée un nouveau contrat (public car nécessaire pour la souscription)
 export const createContract = api<CreateContractRequest, CreateContractResponse>(
   { expose: true, method: "POST", path: "/contracts/create" },
   async (params) => {
@@ -120,7 +163,7 @@ interface UpdateContractStatusRequest {
   metadata?: Record<string, any>;
 }
 
-// Met à jour le statut d'un contrat
+// Met à jour le statut d'un contrat (public car utilisé par webhooks Stripe)
 export const updateContractStatus = api<UpdateContractStatusRequest, { success: boolean }>(
   { expose: true, method: "POST", path: "/contracts/update-status" },
   async (params) => {
@@ -184,9 +227,9 @@ interface GetContractRequest {
   stripe_session_id?: string;
 }
 
-// Récupère un contrat
+// Récupère un contrat (protégé - admin ou propriétaire uniquement)
 export const getContract = api<GetContractRequest, Contract>(
-  { expose: true, method: "POST", path: "/contracts/get" },
+  { expose: true, method: "POST", path: "/contracts/get", auth: true },
   async (params) => {
     try {
       let whereClause = '';
@@ -214,10 +257,32 @@ export const getContract = api<GetContractRequest, Contract>(
         throw APIError.notFound("Contrat non trouvé");
       }
 
-      return {
+      const fullContract: Contract = {
         ...contract,
         metadata: JSON.parse(contract.metadata || '{}')
       };
+
+      // Si admin, retourner toutes les données
+      if (isAdmin()) {
+        log.info("Admin accessed contract", { contractId: contract.id });
+        return fullContract;
+      }
+
+      // Sinon, sanitiser les données sensibles
+      log.info("Non-admin accessed contract (sanitized)", { contractId: contract.id });
+      
+      // Retourner le contrat avec les données personnelles masquées
+      return {
+        ...fullContract,
+        customer_email: '***@***',
+        customer_name: '***',
+        customer_phone: undefined,
+        broker_code: undefined,
+        broker_commission_percent: undefined,
+        broker_commission_amount: undefined,
+        stripe_customer_id: undefined,
+        metadata: {}
+      } as Contract;
 
     } catch (error: any) {
       log.error("Error getting contract", { error: error.message, params });
@@ -245,10 +310,16 @@ interface ListContractsResponse {
   has_more: boolean;
 }
 
-// Liste les contrats avec filtres
+// Liste les contrats avec filtres (admin uniquement)
 export const listContracts = api<ListContractsRequest, ListContractsResponse>(
-  { expose: true, method: "POST", path: "/contracts/list" },
+  { expose: true, method: "POST", path: "/contracts/list", auth: true },
   async (params) => {
+    // Vérifier que l'utilisateur est admin
+    if (!isAdmin()) {
+      log.warn("Unauthorized access attempt to listContracts");
+      throw APIError.permissionDenied("Accès refusé : seuls les administrateurs peuvent lister les contrats");
+    }
+
     try {
       const limit = params.limit || 50;
       const offset = params.offset || 0;
@@ -303,6 +374,8 @@ export const listContracts = api<ListContractsRequest, ListContractsResponse>(
         metadata: JSON.parse(contract.metadata || '{}')
       }));
 
+      log.info("Admin listed contracts", { total, limit, offset });
+
       return {
         contracts: formattedContracts,
         total,
@@ -340,10 +413,18 @@ interface BrokerCommissionSummaryResponse {
   }>;
 }
 
-// Récupère le résumé des commissions pour un courtier
+// Récupère le résumé des commissions pour un courtier (admin uniquement)
 export const getBrokerCommissionSummary = api<BrokerCommissionSummaryRequest, BrokerCommissionSummaryResponse>(
-  { expose: true, method: "POST", path: "/contracts/broker-commission" },
+  { expose: true, method: "POST", path: "/contracts/broker-commission", auth: true },
   async (params) => {
+    // Vérifier que l'utilisateur est admin
+    if (!isAdmin()) {
+      log.warn("Unauthorized access attempt to getBrokerCommissionSummary", { 
+        brokerCode: params.broker_code 
+      });
+      throw APIError.permissionDenied("Accès refusé : seuls les administrateurs peuvent consulter les commissions");
+    }
+
     try {
       let whereConditions: string[] = [];
       let queryParams: any[] = [];
@@ -396,6 +477,11 @@ export const getBrokerCommissionSummary = api<BrokerCommissionSummaryRequest, Br
           payment_type: contract.payment_type,
           created_at: contract.created_at
         };
+      });
+
+      log.info("Admin accessed broker commission summary", { 
+        brokerCode: params.broker_code,
+        totalContracts: contracts.length 
       });
 
       return {
