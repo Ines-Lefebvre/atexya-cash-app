@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Administration cachée
+Disallow: /admin
