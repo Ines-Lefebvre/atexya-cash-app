@@ -39,6 +39,7 @@ interface CreatePaymentSessionRequest {
   paymentOption: PaymentOption;
   cgvVersion: string;
   contractId?: string;
+  idempotencyKey: string;
 }
 
 interface CreatePaymentSessionResponse {
@@ -52,8 +53,30 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
   { expose: true, method: "POST", path: "/stripe/create-payment-session" },
   async (params) => {
     try {
-      const { quoteData, paymentOption, cgvVersion, contractId } = params;
+      const { quoteData, paymentOption, cgvVersion, contractId, idempotencyKey } = params;
       const { type: paymentType, productType } = paymentOption;
+
+      // Vérifier si une session existe déjà avec cette clé d'idempotence
+      const existingSession = await stripeDB.rawQueryRow<any>(
+        `SELECT session_id, customer_id FROM stripe_sessions WHERE idempotency_key = $1 LIMIT 1`,
+        idempotencyKey
+      );
+
+      if (existingSession) {
+        // Récupérer l'URL de la session depuis Stripe
+        const session = await stripe.checkout.sessions.retrieve(existingSession.session_id);
+        
+        safeLog.info("Stripe session already exists for idempotency_key", {
+          sessionId: existingSession.session_id,
+          idempotencyKey
+        });
+
+        return {
+          sessionId: existingSession.session_id,
+          sessionUrl: session.url || '',
+          customerId: existingSession.customer_id
+        };
+      }
 
       // Calcul du prix
       const basePrice = productType === 'premium' ? quoteData.pricePremium : quoteData.priceStandard;
@@ -172,17 +195,19 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         billing_address_collection: 'required'
       };
 
-      const session = await stripe.checkout.sessions.create(sessionParams);
+      const session = await stripe.checkout.sessions.create(sessionParams, {
+        idempotencyKey
+      });
 
       // Sauvegarder la session en base
       await stripeDB.exec`
         INSERT INTO stripe_sessions (
           session_id, customer_id, contract_id, payment_type, product_type,
-          amount_total, currency, status, created_at, metadata
+          amount_total, currency, status, created_at, metadata, idempotency_key
         ) VALUES (
           ${session.id}, ${customer.id}, ${contractId || ''}, ${paymentType}, ${productType},
           ${session.amount_total || 0}, ${session.currency || 'eur'}, ${session.status || 'open'},
-          ${new Date().toISOString()}, ${JSON.stringify(metadata)}
+          ${new Date().toISOString()}, ${JSON.stringify(metadata)}, ${idempotencyKey}
         )
       `;
 

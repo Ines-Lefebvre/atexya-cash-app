@@ -127,6 +127,9 @@ export default function Page6Offre({ appState, setAppState }: Props) {
       const finalAmount = selectedPaymentType === 'monthly' ? Math.round((baseAmount * 1.20) / 12 * 100) / 100 : baseAmount;
       const garantie = isStandard ? appState.choix_garantie : getGarantiePremium();
 
+      // Générer une clé d'idempotence unique pour cette transaction
+      const idempotencyKey = `${appState.siren}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
       // Créer d'abord le contrat en base
       const contractResponse = await backend.atexya.createContract({
         siren: appState.siren,
@@ -148,7 +151,8 @@ export default function Page6Offre({ appState, setAppState }: Props) {
           effectif_global: appState.effectif_global,
           antecedents: appState.antecedents,
           etablissements: appState.etablissements
-        }
+        },
+        idempotency_key: `contract_${idempotencyKey}`
       });
 
       // Préparer les données pour Stripe
@@ -177,7 +181,8 @@ export default function Page6Offre({ appState, setAppState }: Props) {
         quoteData,
         paymentOption,
         cgvVersion: "2025-01",
-        contractId: contractResponse.contract_id
+        contractId: contractResponse.contract_id,
+        idempotencyKey: `stripe_${idempotencyKey}`
       });
 
       // Mettre à jour le contrat avec les infos Stripe

@@ -70,6 +70,7 @@ interface CreateContractRequest {
   stripe_subscription_id?: string;
   cgv_version: string;
   metadata?: Record<string, any>;
+  idempotency_key: string;
 }
 
 interface CreateContractResponse {
@@ -108,6 +109,20 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
   { expose: true, method: "POST", path: "/contracts/create" },
   async (params) => {
     try {
+      // Vérifier si un contrat avec cette clé d'idempotence existe déjà
+      const existingContract = await contractsDB.rawQueryRow<any>(
+        `SELECT id FROM contracts WHERE idempotency_key = $1 LIMIT 1`,
+        params.idempotency_key
+      );
+
+      if (existingContract) {
+        safeLog.info("Contract already exists for idempotency_key", {
+          contractId: existingContract.id,
+          idempotencyKey: params.idempotency_key
+        });
+        return { contract_id: existingContract.id };
+      }
+
       const contractId = `CONTRACT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const now = new Date().toISOString();
       const startDate = new Date().toISOString().split('T')[0];
@@ -123,7 +138,7 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
           contract_type, garantie_amount, premium_ttc, premium_ht, taxes, payment_type,
           broker_code, broker_commission_percent, broker_commission_amount,
           payment_status, stripe_session_id, stripe_customer_id, stripe_subscription_id,
-          cgv_version, contract_start_date, contract_end_date, created_at, updated_at, metadata
+          cgv_version, contract_start_date, contract_end_date, created_at, updated_at, metadata, idempotency_key
         ) VALUES (
           ${contractId}, ${params.siren}, ${params.company_name}, 
           ${params.customer_email}, ${params.customer_name}, ${params.customer_phone},
@@ -132,7 +147,7 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
           ${params.broker_code}, ${params.broker_commission_percent}, ${brokerCommissionAmount},
           'pending', ${params.stripe_session_id}, ${params.stripe_customer_id}, 
           ${params.stripe_subscription_id}, ${params.cgv_version},
-          ${startDate}, ${endDate}, ${now}, ${now}, ${JSON.stringify(params.metadata || {})}
+          ${startDate}, ${endDate}, ${now}, ${now}, ${JSON.stringify(params.metadata || {})}, ${params.idempotency_key}
         )
       `;
 
