@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import backend from '~backend/client';
 import { AppState } from '../App';
+import PaymentOptions from '../components/PaymentOptions';
+import PaymentConfirmationModal from '../components/PaymentConfirmationModal';
 
 interface Props {
   appState: AppState;
@@ -19,12 +20,16 @@ export default function Page6Offre({ appState, setAppState }: Props) {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [selectedOffer, setSelectedOffer] = useState<'standard' | 'premium'>('standard');
   const [cgvAccepted, setCgvAccepted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasValidated, setHasValidated] = useState(false);
   const [activeField, setActiveField] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  
+  // États pour la confirmation de paiement
+  const [selectedPaymentType, setSelectedPaymentType] = useState<'annual' | 'monthly'>('annual');
+  const [selectedProductType, setSelectedProductType] = useState<'standard' | 'premium'>('standard');
   
   // Informations client pour le contrat
   const [customerInfo, setCustomerInfo] = useState({
@@ -73,7 +78,7 @@ export default function Page6Offre({ appState, setAppState }: Props) {
     return appState.choix_garantie * 1.20;
   };
 
-  const handleCreateContract = async () => {
+  const handlePaymentSelect = (paymentType: 'annual' | 'monthly', productType: 'standard' | 'premium') => {
     setHasValidated(true);
     
     const newErrors: Record<string, string> = {};
@@ -106,30 +111,37 @@ export default function Page6Offre({ appState, setAppState }: Props) {
       return;
     }
 
+    // Stocker les choix et afficher la modal de confirmation
+    setSelectedPaymentType(paymentType);
+    setSelectedProductType(productType);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmPayment = async () => {
+    setShowConfirmModal(false);
     setIsProcessing(true);
 
     try {
-      const isStandard = selectedOffer === 'standard';
-      const amount = isStandard ? appState.tarifs.standard_ttc : appState.tarifs.premium_ttc;
+      const isStandard = selectedProductType === 'standard';
+      const baseAmount = isStandard ? appState.tarifs.standard_ttc : appState.tarifs.premium_ttc;
+      const finalAmount = selectedPaymentType === 'monthly' ? Math.round((baseAmount * 1.20) / 12 * 100) / 100 : baseAmount;
       const garantie = isStandard ? appState.choix_garantie : getGarantiePremium();
 
-      // Calcul de la commission courtier
-      const commissionPercent = appState.broker_code ? 15 : 0; // 15% de commission par défaut
-
-      // Créer le contrat en base
+      // Créer d'abord le contrat en base
       const contractResponse = await backend.atexya.createContract({
         siren: appState.siren,
         company_name: appState.company_data.denomination,
         customer_email: customerInfo.email,
         customer_name: customerInfo.name,
         customer_phone: customerInfo.phone,
-        contract_type: selectedOffer,
+        contract_type: selectedProductType,
         garantie_amount: garantie,
-        premium_ttc: Math.round(amount * 100), // en centimes
+        premium_ttc: Math.round(finalAmount * 100), // en centimes
         premium_ht: Math.round((appState.tarifs.ht || 0) * 100),
         taxes: Math.round((appState.tarifs.taxes || 0) * 100),
+        payment_type: selectedPaymentType,
         broker_code: appState.broker_code || undefined,
-        broker_commission_percent: commissionPercent > 0 ? commissionPercent : undefined,
+        broker_commission_percent: appState.broker_code ? 15 : undefined,
         cgv_version: "2025-01",
         metadata: {
           ctn: appState.ctn,
@@ -139,20 +151,52 @@ export default function Page6Offre({ appState, setAppState }: Props) {
         }
       });
 
-      toast({
-        title: "Contrat créé",
-        description: `Votre contrat ${contractResponse.contract_id} a été créé avec succès. Le paiement sera traité ultérieurement.`,
+      // Préparer les données pour Stripe
+      const quoteData = {
+        companyName: appState.company_data.denomination,
+        sirenNumber: appState.siren,
+        effectif: appState.effectif_global,
+        secteurCTN: appState.ctn,
+        garantieAmount: garantie,
+        priceStandard: appState.tarifs.standard_ttc,
+        pricePremium: appState.tarifs.premium_ttc,
+        hasAntecedents: appState.antecedents.ip2 > 0 || appState.antecedents.ip3 > 0 || appState.antecedents.ip4 > 0 || appState.antecedents.deces > 0,
+        customerEmail: customerInfo.email,
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        brokerCode: appState.broker_code || undefined
+      };
+
+      const paymentOption = {
+        type: selectedPaymentType,
+        productType: selectedProductType
+      };
+
+      // Créer la session Stripe
+      const stripeResponse = await backend.stripe.createPaymentSession({
+        quoteData,
+        paymentOption,
+        cgvVersion: "2025-01",
+        contractId: contractResponse.contract_id
       });
 
-      // Redirection vers une page de confirmation
-      navigate('/payment-success?contract_id=' + contractResponse.contract_id);
+      // Mettre à jour le contrat avec les infos Stripe
+      await backend.atexya.updateContractStatus({
+        contract_id: contractResponse.contract_id,
+        payment_status: 'pending',
+        stripe_session_id: stripeResponse.sessionId,
+        stripe_customer_id: stripeResponse.customerId
+      });
+
+      // Rediriger vers Stripe Checkout
+      window.location.href = stripeResponse.sessionUrl;
 
     } catch (error: any) {
-      console.error('Erreur création contrat:', error);
+      console.error('Erreur création session paiement:', error);
       
       toast({
-        title: "Erreur de création",
-        description: "Impossible de créer le contrat. Veuillez réessayer ou contacter le support.",
+        title: "Erreur de paiement",
+        description: "Impossible d'initialiser le paiement. Veuillez réessayer ou contacter le support.",
         variant: "destructive"
       });
       setIsProcessing(false);
@@ -162,10 +206,6 @@ export default function Page6Offre({ appState, setAppState }: Props) {
   const getTypeGarantie = () => {
     return appState.effectif_global <= 60 ? 'IP3 & IP4' : 'IP4 seul';
   };
-
-  const originalPremiumPrice = appState.tarifs.promo_active 
-    ? appState.tarifs.premium_ttc / (1 - 15 / 100)
-    : appState.tarifs.premium_ttc;
 
   const getFieldClasses = (field: string) => {
     const hasError = hasValidated && errors[field];
@@ -245,7 +285,7 @@ export default function Page6Offre({ appState, setAppState }: Props) {
           Votre Offre Finale
         </h1>
         <p className="text-lg text-gray-600 mt-2">
-          Voici le récapitulatif de votre devis d'assurance responsabilité civile professionnelle.
+          Finalisez votre souscription et procédez au paiement sécurisé.
         </p>
       </div>
 
@@ -389,99 +429,23 @@ export default function Page6Offre({ appState, setAppState }: Props) {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card 
-              className={`cursor-pointer transition-all duration-200 ${
-                selectedOffer === 'standard' 
-                  ? 'border-2 border-[#0f2f47] bg-blue-50' 
-                  : 'border-gray-200 hover:border-[#0f2f47]'
-              }`}
-              onClick={() => setSelectedOffer('standard')}
-            >
-              <CardHeader>
-                <CardTitle className="text-center font-astaneh text-[#0f2f47]">
-                  Offre Standard
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-center space-y-4">
-                <div>
-                  <div className="text-3xl font-bold font-astaneh text-[#0f2f47]">
-                    {formatCurrency(appState.choix_garantie)}
-                  </div>
-                  <div className="text-sm text-gray-600">de garantie ({getTypeGarantie()})</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-[#c19a5f]">
-                    {formatCurrency(appState.tarifs.standard_ttc)}
-                    <span className="text-sm font-normal text-gray-600"> TTC/an</span>
-                  </div>
-                  <div className="text-base text-gray-700 mt-1">
-                    ou {formatCurrency((appState.tarifs.standard_ttc * 1.2) / 12)}
-                    <span className="text-sm font-normal"> TTC/mois</span>
-                  </div>
-                </div>
-                {appState.broker_code && (
-                  <div className="text-xs text-gray-500">
-                    Commission courtier incluse
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card 
-              className={`cursor-pointer transition-all duration-200 ${
-                selectedOffer === 'premium' 
-                  ? 'border-2 border-[#c19a5f] bg-yellow-50' 
-                  : 'border-gray-200 hover:border-[#c19a5f]'
-              }`}
-              onClick={() => setSelectedOffer('premium')}
-            >
-              <CardHeader>
-                <CardTitle className="text-center text-[#c19a5f] flex items-center justify-center gap-2 font-astaneh">
-                  Offre Premium
-                  {appState.tarifs.promo_active && (
-                    <Badge variant="destructive" className="text-xs">PROMO</Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-center space-y-4">
-                <div>
-                  <div className="text-3xl font-bold text-[#c19a5f] font-astaneh">
-                    {formatCurrency(getGarantiePremium())}
-                  </div>
-                  <div className="text-sm text-gray-600">de garantie ({getTypeGarantie()})</div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Garantie majorée de 20%
-                  </div>
-                </div>
-                <div>
-                  {appState.tarifs.promo_active && (
-                    <div className="text-lg line-through text-gray-400">
-                      {formatCurrency(originalPremiumPrice)}
-                    </div>
-                  )}
-                  <div className="text-2xl font-bold text-[#c19a5f]">
-                    {formatCurrency(appState.tarifs.premium_ttc)}
-                    <span className="text-sm font-normal text-gray-600"> TTC/an</span>
-                  </div>
-                  <div className="text-base text-gray-700 mt-1">
-                    ou {formatCurrency((appState.tarifs.premium_ttc * 1.2) / 12)}
-                    <span className="text-sm font-normal"> TTC/mois</span>
-                  </div>
-                  {appState.tarifs.promo_active && (
-                    <div className="text-sm text-red-600 font-medium mt-2">
-                      Offre promotionnelle valable jusqu'au {appState.tarifs.promo_expires}
-                    </div>
-                  )}
-                </div>
-                {appState.broker_code && (
-                  <div className="text-xs text-gray-500">
-                    Commission courtier incluse
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-bold text-[#0f2f47] font-astaneh">
+                4. Choix de votre offre et paiement
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PaymentOptions
+                standardPrice={appState.tarifs.standard_ttc}
+                premiumPrice={appState.tarifs.premium_ttc}
+                promoActive={appState.tarifs.promo_active}
+                promoLabel={appState.tarifs.promo_label}
+                onPaymentSelect={handlePaymentSelect}
+                isProcessing={isProcessing}
+              />
+            </CardContent>
+          </Card>
 
           <div className={`flex items-center space-x-3 ${hasValidated && errors.cgv ? 'p-2 rounded bg-yellow-50' : ''}`}>
             <Checkbox
@@ -517,32 +481,23 @@ export default function Page6Offre({ appState, setAppState }: Props) {
           {hasValidated && errors.cgv && (
             <p id="cgv-error" className="error-text -mt-2 ml-2">{errors.cgv}</p>
           )}
-
-          <Card className="border-orange-500 bg-orange-50">
-            <CardContent className="p-4 text-center">
-              <p className="text-orange-800 font-medium">
-                Le paiement en ligne sera disponible prochainement.
-              </p>
-              <p className="text-orange-700 text-sm mt-2">
-                En attendant, votre contrat sera créé et vous serez contacté pour finaliser le règlement.
-              </p>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end pt-4">
-            <Button
-              onClick={handleCreateContract}
-              disabled={isProcessing}
-              className="bg-[#0f2f47] text-white hover:bg-[#c19a5f] px-8 py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isProcessing ? 'Création en cours...' : 'Créer le contrat'}
-            </Button>
-          </div>
-          <div className="mt-2 text-sm text-gray-500 text-right">
-            Contrat créé immédiatement • Paiement traité ultérieurement
-          </div>
         </CardContent>
       </Card>
+
+      {/* Modal de confirmation */}
+      <PaymentConfirmationModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmPayment}
+        paymentType={selectedPaymentType}
+        productType={selectedProductType}
+        amount={selectedPaymentType === 'monthly' 
+          ? Math.round(((selectedProductType === 'premium' ? appState.tarifs.premium_ttc : appState.tarifs.standard_ttc) * 1.20) / 12 * 100) / 100
+          : (selectedProductType === 'premium' ? appState.tarifs.premium_ttc : appState.tarifs.standard_ttc)
+        }
+        companyName={appState.company_data.denomination}
+        garantieAmount={appState.choix_garantie}
+      />
     </div>
   );
 }

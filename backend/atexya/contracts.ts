@@ -22,7 +22,11 @@ interface Contract {
   broker_code?: string;
   broker_commission_percent?: number;
   broker_commission_amount?: number;
-  payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed';
+  payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed' | 'cancelled';
+  payment_type?: 'annual' | 'monthly';
+  stripe_session_id?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
   cgv_version: string;
   contract_start_date: string;
   contract_end_date: string;
@@ -42,8 +46,12 @@ interface CreateContractRequest {
   premium_ttc: number;
   premium_ht: number;
   taxes: number;
+  payment_type?: 'annual' | 'monthly';
   broker_code?: string;
   broker_commission_percent?: number;
+  stripe_session_id?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
   cgv_version: string;
   metadata?: Record<string, any>;
 }
@@ -69,17 +77,18 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
       await contractsDB.exec`
         INSERT INTO contracts (
           id, siren, company_name, customer_email, customer_name, customer_phone,
-          contract_type, garantie_amount, premium_ttc, premium_ht, taxes,
+          contract_type, garantie_amount, premium_ttc, premium_ht, taxes, payment_type,
           broker_code, broker_commission_percent, broker_commission_amount,
-          payment_status, cgv_version,
-          contract_start_date, contract_end_date, created_at, updated_at, metadata
+          payment_status, stripe_session_id, stripe_customer_id, stripe_subscription_id,
+          cgv_version, contract_start_date, contract_end_date, created_at, updated_at, metadata
         ) VALUES (
           ${contractId}, ${params.siren}, ${params.company_name}, 
           ${params.customer_email}, ${params.customer_name}, ${params.customer_phone},
           ${params.contract_type}, ${params.garantie_amount}, ${params.premium_ttc}, 
-          ${params.premium_ht}, ${params.taxes}, ${params.broker_code}, 
-          ${params.broker_commission_percent}, ${brokerCommissionAmount},
-          'pending', ${params.cgv_version},
+          ${params.premium_ht}, ${params.taxes}, ${params.payment_type},
+          ${params.broker_code}, ${params.broker_commission_percent}, ${brokerCommissionAmount},
+          'pending', ${params.stripe_session_id}, ${params.stripe_customer_id}, 
+          ${params.stripe_subscription_id}, ${params.cgv_version},
           ${startDate}, ${endDate}, ${now}, ${now}, ${JSON.stringify(params.metadata || {})}
         )
       `;
@@ -88,6 +97,8 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
         contractId,
         siren: params.siren,
         amount: params.premium_ttc,
+        paymentType: params.payment_type,
+        stripeSessionId: params.stripe_session_id,
         brokerCommission: brokerCommissionAmount
       });
 
@@ -102,7 +113,10 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
 
 interface UpdateContractStatusRequest {
   contract_id: string;
-  payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed';
+  payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed' | 'cancelled';
+  stripe_session_id?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
   metadata?: Record<string, any>;
 }
 
@@ -119,6 +133,21 @@ export const updateContractStatus = api<UpdateContractStatusRequest, { success: 
       updates.push(`payment_status = $${placeholderIndex++}`, `updated_at = $${placeholderIndex++}`);
       values.push(params.payment_status, now);
 
+      if (params.stripe_session_id) {
+        updates.push(`stripe_session_id = $${placeholderIndex++}`);
+        values.push(params.stripe_session_id);
+      }
+
+      if (params.stripe_customer_id) {
+        updates.push(`stripe_customer_id = $${placeholderIndex++}`);
+        values.push(params.stripe_customer_id);
+      }
+
+      if (params.stripe_subscription_id) {
+        updates.push(`stripe_subscription_id = $${placeholderIndex++}`);
+        values.push(params.stripe_subscription_id);
+      }
+
       if (params.metadata) {
         updates.push(`metadata = $${placeholderIndex++}`);
         values.push(JSON.stringify(params.metadata));
@@ -133,7 +162,8 @@ export const updateContractStatus = api<UpdateContractStatusRequest, { success: 
 
       log.info("Contract status updated", {
         contractId: params.contract_id,
-        newStatus: params.payment_status
+        newStatus: params.payment_status,
+        stripeSessionId: params.stripe_session_id
       });
 
       return { success: true };
@@ -151,6 +181,7 @@ export const updateContractStatus = api<UpdateContractStatusRequest, { success: 
 interface GetContractRequest {
   contract_id?: string;
   siren?: string;
+  stripe_session_id?: string;
 }
 
 // Récupère un contrat
@@ -167,6 +198,9 @@ export const getContract = api<GetContractRequest, Contract>(
       } else if (params.siren) {
         whereClause = 'siren = $1';
         values.push(params.siren);
+      } else if (params.stripe_session_id) {
+        whereClause = 'stripe_session_id = $1';
+        values.push(params.stripe_session_id);
       } else {
         throw APIError.invalidArgument("Aucun critère de recherche fourni");
       }
@@ -198,7 +232,8 @@ export const getContract = api<GetContractRequest, Contract>(
 interface ListContractsRequest {
   limit?: number;
   offset?: number;
-  status?: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed';
+  status?: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed' | 'cancelled';
+  payment_type?: 'annual' | 'monthly';
   broker_code?: string;
   date_from?: string;
   date_to?: string;
@@ -225,6 +260,11 @@ export const listContracts = api<ListContractsRequest, ListContractsResponse>(
       if (params.status) {
         whereConditions.push(`payment_status = $${placeholderIndex++}`);
         queryParams.push(params.status);
+      }
+
+      if (params.payment_type) {
+        whereConditions.push(`payment_type = $${placeholderIndex++}`);
+        queryParams.push(params.payment_type);
       }
 
       if (params.broker_code) {
@@ -295,6 +335,7 @@ interface BrokerCommissionSummaryResponse {
     premium_ttc: number;
     commission_amount: number;
     payment_status: string;
+    payment_type?: string;
     created_at: string;
   }>;
 }
@@ -325,7 +366,7 @@ export const getBrokerCommissionSummary = api<BrokerCommissionSummaryRequest, Br
 
       const contracts = await contractsDB.rawQueryAll<any>(
         `SELECT id, siren, company_name, premium_ttc, broker_commission_amount, 
-                payment_status, created_at
+                payment_status, payment_type, created_at
          FROM contracts ${whereClause} 
          ORDER BY created_at DESC`,
         ...queryParams
@@ -352,6 +393,7 @@ export const getBrokerCommissionSummary = api<BrokerCommissionSummaryRequest, Br
           premium_ttc: contract.premium_ttc,
           commission_amount: commissionAmount,
           payment_status: contract.payment_status,
+          payment_type: contract.payment_type,
           created_at: contract.created_at
         };
       });
