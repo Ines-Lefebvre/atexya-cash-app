@@ -3,6 +3,8 @@ import { secret } from "encore.dev/config";
 import { SQLDatabase } from "encore.dev/storage/sqldb";
 import log from "encore.dev/log";
 import Stripe from "stripe";
+import { getAuthData } from "~encore/auth";
+import type { AdminAuthData } from "../admin/auth";
 
 const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
 const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
@@ -255,11 +257,20 @@ interface RefundResponse {
   status: string;
 }
 
-// Crée un remboursement
+// Crée un remboursement (admin uniquement)
 export const createRefund = api<RefundRequest, RefundResponse>(
-  { expose: true, method: "POST", path: "/stripe/refund" },
+  { expose: true, method: "POST", path: "/stripe/refund", auth: true },
   async (params) => {
+    const authData = getAuthData()! as AdminAuthData;
+    
+    if (!authData || authData.userID !== 'admin') {
+      log.warn("Unauthorized refund attempt", { userID: authData?.userID });
+      throw APIError.permissionDenied("Accès refusé : seuls les administrateurs peuvent créer des remboursements");
+    }
+
     try {
+      const idempotencyKey = `refund_${params.paymentIntentId}_${Date.now()}`;
+      
       const refundParams: Stripe.RefundCreateParams = {
         payment_intent: params.paymentIntentId,
         reason: (params.reason as Stripe.RefundCreateParams.Reason) || 'requested_by_customer'
@@ -269,12 +280,16 @@ export const createRefund = api<RefundRequest, RefundResponse>(
         refundParams.amount = Math.round(params.amount * 100);
       }
 
-      const refund = await stripe.refunds.create(refundParams);
+      const refund = await stripe.refunds.create(refundParams, {
+        idempotencyKey
+      });
 
-      log.info("Refund created", {
+      log.info("Refund created by admin", {
         refundId: refund.id,
         amount: refund.amount,
-        paymentIntentId: params.paymentIntentId
+        paymentIntentId: params.paymentIntentId,
+        adminId: authData.userID,
+        idempotencyKey
       });
 
       return {
@@ -284,7 +299,11 @@ export const createRefund = api<RefundRequest, RefundResponse>(
       };
 
     } catch (error: any) {
-      log.error("Error creating refund", { error: error.message, paymentIntentId: params.paymentIntentId });
+      log.error("Error creating refund", { 
+        error: error.message, 
+        paymentIntentId: params.paymentIntentId,
+        adminId: authData.userID
+      });
       throw APIError.internal("Impossible de créer le remboursement");
     }
   }
