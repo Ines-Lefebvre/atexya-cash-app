@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
-import { ExternalLink, Download, Eye, RefreshCw, LogOut } from 'lucide-react';
+import { Eye, RefreshCw, LogOut } from 'lucide-react';
 import backend from '~backend/client';
 import PricingDebug from './PricingDebug';
 
@@ -43,11 +43,9 @@ export default function AdminDashboard() {
   const [cgvConfig, setCgvConfig] = useState<CgvConfig | null>(null);
   const [cgvFile, setCgvFile] = useState<File | null>(null);
 
-  // States for payments and contracts
+  // States for contracts
   const [contracts, setContracts] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
   const [contractsLoading, setContractsLoading] = useState(false);
-  const [transactionsLoading, setTransactionsLoading] = useState(false);
 
   // Create authenticated backend client with cookie support
   const adminBackend = backend.with({
@@ -109,22 +107,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchTransactions = async () => {
-    try {
-      setTransactionsLoading(true);
-      const response = await adminBackend.admin.listTransactions({ limit: 50 });
-      setTransactions(response.transactions);
-    } catch (error) {
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les transactions.",
-        variant: "destructive",
-      });
-    } finally {
-      setTransactionsLoading(false);
-    }
-  };
-
   const handleSave = async (saver: () => Promise<any>, name: string) => {
     try {
       await saver();
@@ -166,27 +148,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleRefund = async (paymentIntentId: string, amount?: number) => {
-    try {
-      await adminBackend.admin.createRefund({
-        payment_intent_id: paymentIntentId,
-        amount: amount,
-        reason: "requested_by_customer"
-      });
-      toast({
-        title: "Remboursement effectué",
-        description: "Le remboursement a été traité avec succès.",
-      });
-      fetchTransactions(); // Refresh the list
-    } catch (error) {
-      toast({
-        title: "Erreur de remboursement",
-        description: "Impossible d'effectuer le remboursement.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await adminBackend.admin.logout();
@@ -203,16 +164,6 @@ export default function AdminDashboard() {
       currency: 'EUR',
       minimumFractionDigits: 2
     }).format(amountCents / 100);
-  };
-
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   };
 
   const getStatusBadge = (status: string) => {
@@ -260,14 +211,13 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="promotion" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="promotion">Promotion</TabsTrigger>
             <TabsTrigger value="liens">Liens</TabsTrigger>
             <TabsTrigger value="courtiers">Courtiers</TabsTrigger>
             <TabsTrigger value="cgv">CGV</TabsTrigger>
             <TabsTrigger value="tarification">Tarification</TabsTrigger>
             <TabsTrigger value="contrats">Contrats</TabsTrigger>
-            <TabsTrigger value="paiements">Paiements</TabsTrigger>
             <TabsTrigger value="debug">Debug Tarifs</TabsTrigger>
           </TabsList>
 
@@ -493,89 +443,6 @@ export default function AdminDashboard() {
                                 <div className="flex space-x-2">
                                   <Button variant="outline" size="sm">
                                     <Eye className="w-4 h-4" />
-                                  </Button>
-                                  {contract.stripe_invoice_id && (
-                                    <Button variant="outline" size="sm">
-                                      <Download className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="paiements">
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>Gestion des Paiements</CardTitle>
-                  <Button onClick={fetchTransactions} variant="outline" size="sm">
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Actualiser
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {transactionsLoading ? (
-                  <div className="text-center py-8">Chargement des transactions...</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID Transaction</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead>Montant</TableHead>
-                          <TableHead>Statut</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>SIREN</TableHead>
-                          <TableHead>Commission</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {transactions.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={8} className="text-center py-8">
-                              Aucune transaction trouvée. <Button variant="link" onClick={fetchTransactions}>Charger les transactions</Button>
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          transactions.map((transaction) => (
-                            <TableRow key={transaction.id}>
-                              <TableCell className="font-mono text-xs">{transaction.id.substring(0, 12)}...</TableCell>
-                              <TableCell className="text-sm">{transaction.description}</TableCell>
-                              <TableCell className="font-medium">{formatCurrency(transaction.amount)}</TableCell>
-                              <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                              <TableCell className="text-xs">{formatDate(transaction.created)}</TableCell>
-                              <TableCell className="text-xs">
-                                {transaction.metadata?.siren || '-'}
-                              </TableCell>
-                              <TableCell className="text-xs">
-                                {transaction.metadata?.commission_amount ? 
-                                  formatCurrency(parseInt(transaction.metadata.commission_amount)) : '-'}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex space-x-2">
-                                  {transaction.status === 'succeeded' && (
-                                    <Button 
-                                      variant="outline" 
-                                      size="sm"
-                                      onClick={() => handleRefund(transaction.id)}
-                                    >
-                                      Rembourser
-                                    </Button>
-                                  )}
-                                  <Button variant="outline" size="sm">
-                                    <ExternalLink className="w-4 h-4" />
                                   </Button>
                                 </div>
                               </TableCell>

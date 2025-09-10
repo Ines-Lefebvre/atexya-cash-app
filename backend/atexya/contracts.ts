@@ -23,9 +23,6 @@ interface Contract {
   broker_commission_percent?: number;
   broker_commission_amount?: number;
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed';
-  stripe_session_id?: string;
-  stripe_payment_intent_id?: string;
-  stripe_invoice_id?: string;
   cgv_version: string;
   contract_start_date: string;
   contract_end_date: string;
@@ -47,7 +44,6 @@ interface CreateContractRequest {
   taxes: number;
   broker_code?: string;
   broker_commission_percent?: number;
-  stripe_session_id?: string;
   cgv_version: string;
   metadata?: Record<string, any>;
 }
@@ -75,7 +71,7 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
           id, siren, company_name, customer_email, customer_name, customer_phone,
           contract_type, garantie_amount, premium_ttc, premium_ht, taxes,
           broker_code, broker_commission_percent, broker_commission_amount,
-          payment_status, stripe_session_id, cgv_version,
+          payment_status, cgv_version,
           contract_start_date, contract_end_date, created_at, updated_at, metadata
         ) VALUES (
           ${contractId}, ${params.siren}, ${params.company_name}, 
@@ -83,7 +79,7 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
           ${params.contract_type}, ${params.garantie_amount}, ${params.premium_ttc}, 
           ${params.premium_ht}, ${params.taxes}, ${params.broker_code}, 
           ${params.broker_commission_percent}, ${brokerCommissionAmount},
-          'pending', ${params.stripe_session_id}, ${params.cgv_version},
+          'pending', ${params.cgv_version},
           ${startDate}, ${endDate}, ${now}, ${now}, ${JSON.stringify(params.metadata || {})}
         )
       `;
@@ -107,8 +103,6 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
 interface UpdateContractStatusRequest {
   contract_id: string;
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'disputed';
-  stripe_payment_intent_id?: string;
-  stripe_invoice_id?: string;
   metadata?: Record<string, any>;
 }
 
@@ -124,16 +118,6 @@ export const updateContractStatus = api<UpdateContractStatusRequest, { success: 
 
       updates.push(`payment_status = $${placeholderIndex++}`, `updated_at = $${placeholderIndex++}`);
       values.push(params.payment_status, now);
-
-      if (params.stripe_payment_intent_id) {
-        updates.push(`stripe_payment_intent_id = $${placeholderIndex++}`);
-        values.push(params.stripe_payment_intent_id);
-      }
-
-      if (params.stripe_invoice_id) {
-        updates.push(`stripe_invoice_id = $${placeholderIndex++}`);
-        values.push(params.stripe_invoice_id);
-      }
 
       if (params.metadata) {
         updates.push(`metadata = $${placeholderIndex++}`);
@@ -166,7 +150,6 @@ export const updateContractStatus = api<UpdateContractStatusRequest, { success: 
 
 interface GetContractRequest {
   contract_id?: string;
-  stripe_session_id?: string;
   siren?: string;
 }
 
@@ -181,9 +164,6 @@ export const getContract = api<GetContractRequest, Contract>(
       if (params.contract_id) {
         whereClause = 'id = $1';
         values.push(params.contract_id);
-      } else if (params.stripe_session_id) {
-        whereClause = 'stripe_session_id = $1';
-        values.push(params.stripe_session_id);
       } else if (params.siren) {
         whereClause = 'siren = $1';
         values.push(params.siren);

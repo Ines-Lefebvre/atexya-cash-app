@@ -14,9 +14,6 @@ CREATE TABLE contracts (
   broker_commission_percent INTEGER,
   broker_commission_amount INTEGER,
   payment_status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refunded', 'disputed')),
-  stripe_session_id VARCHAR(255),
-  stripe_payment_intent_id VARCHAR(255),
-  stripe_invoice_id VARCHAR(255),
   cgv_version VARCHAR(50) NOT NULL,
   contract_start_date DATE NOT NULL,
   contract_end_date DATE NOT NULL,
@@ -30,5 +27,3 @@ CREATE INDEX idx_contracts_siren ON contracts(siren);
 CREATE INDEX idx_contracts_status ON contracts(payment_status);
 CREATE INDEX idx_contracts_broker ON contracts(broker_code);
 CREATE INDEX idx_contracts_created ON contracts(created_at);
-CREATE INDEX idx_contracts_stripe_session ON contracts(stripe_session_id);
-CREATE INDEX idx_contracts_stripe_payment_intent ON contracts(stripe_payment_intent_id);

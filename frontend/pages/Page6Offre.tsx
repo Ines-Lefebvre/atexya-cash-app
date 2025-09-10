@@ -26,7 +26,7 @@ export default function Page6Offre({ appState, setAppState }: Props) {
   const [activeField, setActiveField] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   
-  // Informations client pour le paiement
+  // Informations client pour le contrat
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     email: '',
@@ -73,7 +73,7 @@ export default function Page6Offre({ appState, setAppState }: Props) {
     return appState.choix_garantie * 1.20;
   };
 
-  const handlePayment = async () => {
+  const handleCreateContract = async () => {
     setHasValidated(true);
     
     const newErrors: Record<string, string> = {};
@@ -116,76 +116,43 @@ export default function Page6Offre({ appState, setAppState }: Props) {
       // Calcul de la commission courtier
       const commissionPercent = appState.broker_code ? 15 : 0; // 15% de commission par défaut
 
-      const metadata = {
-        cgv_accepted: true,
-        cgv_version: "2025-01",
-        broker_code: appState.broker_code,
-        commission: commissionPercent,
+      // Créer le contrat en base
+      const contractResponse = await backend.atexya.createContract({
         siren: appState.siren,
-        garantie: garantie,
-        type: selectedOffer,
-        customer_name: customerInfo.name,
+        company_name: appState.company_data.denomination,
         customer_email: customerInfo.email,
-        customer_phone: customerInfo.phone
-      };
-
-      const response = await backend.atexya.createCheckoutSession({
-        amount: Math.round(amount * 100), // Stripe uses cents
-        metadata
+        customer_name: customerInfo.name,
+        customer_phone: customerInfo.phone,
+        contract_type: selectedOffer,
+        garantie_amount: garantie,
+        premium_ttc: Math.round(amount * 100), // en centimes
+        premium_ht: Math.round((appState.tarifs.ht || 0) * 100),
+        taxes: Math.round((appState.tarifs.taxes || 0) * 100),
+        broker_code: appState.broker_code || undefined,
+        broker_commission_percent: commissionPercent > 0 ? commissionPercent : undefined,
+        cgv_version: "2025-01",
+        metadata: {
+          ctn: appState.ctn,
+          effectif_global: appState.effectif_global,
+          antecedents: appState.antecedents,
+          etablissements: appState.etablissements
+        }
       });
 
-      // Créer le contrat en base avant la redirection
-      try {
-        await backend.atexya.createContract({
-          siren: appState.siren,
-          company_name: appState.company_data.denomination,
-          customer_email: customerInfo.email,
-          customer_name: customerInfo.name,
-          customer_phone: customerInfo.phone,
-          contract_type: selectedOffer,
-          garantie_amount: garantie,
-          premium_ttc: Math.round(amount * 100), // en centimes
-          premium_ht: Math.round((appState.tarifs.ht || 0) * 100),
-          taxes: Math.round((appState.tarifs.taxes || 0) * 100),
-          broker_code: appState.broker_code || undefined,
-          broker_commission_percent: commissionPercent > 0 ? commissionPercent : undefined,
-          stripe_session_id: response.session_id,
-          cgv_version: "2025-01",
-          metadata: {
-            ctn: appState.ctn,
-            effectif_global: appState.effectif_global,
-            antecedents: appState.antecedents,
-            etablissements: appState.etablissements
-          }
-        });
-      } catch (contractError) {
-        console.error('Erreur création contrat:', contractError);
-        // Continuer malgré l'erreur de création de contrat
-        // Le webhook pourra créer le contrat plus tard
-      }
+      toast({
+        title: "Contrat créé",
+        description: `Votre contrat ${contractResponse.contract_id} a été créé avec succès. Le paiement sera traité ultérieurement.`,
+      });
 
-      // Redirection vers Stripe
-      window.location.href = response.checkout_url;
+      // Redirection vers une page de confirmation
+      navigate('/payment-success?contract_id=' + contractResponse.contract_id);
 
     } catch (error: any) {
-      console.error('Erreur création session Stripe:', error);
-      
-      let errorMessage = "Impossible de créer la session de paiement. Veuillez réessayer.";
-      
-      // Gestion des erreurs spécifiques
-      if (error.message) {
-        if (error.message.includes("Configuration")) {
-          errorMessage = "Le service de paiement n'est pas encore configuré. Veuillez contacter le support.";
-        } else if (error.message.includes("SIREN")) {
-          errorMessage = "Erreur avec les données de l'entreprise. Veuillez vérifier votre SIREN.";
-        } else if (error.message.includes("email")) {
-          errorMessage = "Adresse email invalide. Veuillez corriger et réessayer.";
-        }
-      }
+      console.error('Erreur création contrat:', error);
       
       toast({
-        title: "Erreur de paiement",
-        description: errorMessage,
+        title: "Erreur de création",
+        description: "Impossible de créer le contrat. Veuillez réessayer ou contacter le support.",
         variant: "destructive"
       });
       setIsProcessing(false);
@@ -551,17 +518,28 @@ export default function Page6Offre({ appState, setAppState }: Props) {
             <p id="cgv-error" className="error-text -mt-2 ml-2">{errors.cgv}</p>
           )}
 
+          <Card className="border-orange-500 bg-orange-50">
+            <CardContent className="p-4 text-center">
+              <p className="text-orange-800 font-medium">
+                Le paiement en ligne sera disponible prochainement.
+              </p>
+              <p className="text-orange-700 text-sm mt-2">
+                En attendant, votre contrat sera créé et vous serez contacté pour finaliser le règlement.
+              </p>
+            </CardContent>
+          </Card>
+
           <div className="flex justify-end pt-4">
             <Button
-              onClick={handlePayment}
+              onClick={handleCreateContract}
               disabled={isProcessing}
               className="bg-[#0f2f47] text-white hover:bg-[#c19a5f] px-8 py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isProcessing ? 'Traitement...' : 'Valider et passer au paiement'}
+              {isProcessing ? 'Création en cours...' : 'Créer le contrat'}
             </Button>
           </div>
           <div className="mt-2 text-sm text-gray-500 text-right">
-            Paiement sécurisé par Stripe • Facturation automatique
+            Contrat créé immédiatement • Paiement traité ultérieurement
           </div>
         </CardContent>
       </Card>
