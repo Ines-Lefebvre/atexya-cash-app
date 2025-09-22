@@ -59,7 +59,7 @@ frontend/
 ```bash
 # Cloner le projet
 git clone <repository>
-cd atexya-cash
+cd atexya-cash-app
 
 # Installer Encore CLI si pas fait
 encore version

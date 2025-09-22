@@ -52,7 +52,7 @@ PAPPERS_API_KEY=votre_cle_api_pappers
 1. **Cloner le repository**
 ```bash
 git clone <repository-url>
-cd atexya-cash
+cd atexya-cash-app
 ```
 
 2. **Déployer sur Leap**

@@ -9,7 +9,7 @@ Ce guide vous accompagne dans le déploiement de l'application Atexya Cash sur l
 ```bash
 # Cloner le projet
 git clone <votre-repository>
-cd atexya-cash
+cd atexya-cash-app
 
 # Vérifier la structure
 ls -la

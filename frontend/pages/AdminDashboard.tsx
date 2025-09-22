@@ -32,6 +32,22 @@ interface CgvConfig {
   version: string;
 }
 
+// Helper to convert file to base64 string
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      // The result looks like "data:application/pdf;base64,JVBERi0xLjQKJ..."
+      // We only need the base64 part.
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -136,8 +152,7 @@ export default function AdminDashboard() {
   const handleCgvUpload = async () => {
     if (!cgvFile) return;
     try {
-      const arrayBuffer = await cgvFile.arrayBuffer();
-      const base64File = Buffer.from(arrayBuffer).toString('base64');
+      const base64File = await fileToBase64(cgvFile);
       await handleSave(() => adminBackend.admin.uploadCgvPdf({ file: base64File }), "Fichier CGV");
     } catch (error) {
       toast({
