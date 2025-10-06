@@ -13,6 +13,7 @@ import FicheContact from './pages/FicheContact';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import PaymentSuccess from './pages/PaymentSuccess';
+import DataDeletion from './pages/DataDeletion';
 
 export interface AppState {
   siren: string;
@@ -133,6 +134,14 @@ function App() {
             <Route 
               path="/payment-success" 
               element={<PaymentSuccess />} 
+            />
+            <Route 
+              path="/user/delete" 
+              element={<DataDeletion />} 
+            />
+            <Route 
+              path="/user/delete/confirm" 
+              element={<DataDeletion />} 
             />
           </Routes>
         </main>

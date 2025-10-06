@@ -36,6 +36,7 @@ export class Client {
     public readonly admin: admin.ServiceClient
     public readonly atexya: atexya.ServiceClient
     public readonly stripe: stripe.ServiceClient
+    public readonly user: user.ServiceClient
     private readonly options: ClientOptions
     private readonly target: string
 
@@ -53,6 +54,7 @@ export class Client {
         this.admin = new admin.ServiceClient(base)
         this.atexya = new atexya.ServiceClient(base)
         this.stripe = new stripe.ServiceClient(base)
+        this.user = new user.ServiceClient(base)
     }
 
     /**
@@ -100,6 +102,11 @@ import {
     uploadCgvPdf as api_admin_cgv_uploadCgvPdf
 } from "~backend/admin/cgv";
 import {
+    getDeletionAudit as api_admin_deletion_requests_getDeletionAudit,
+    getDeletionStats as api_admin_deletion_requests_getDeletionStats,
+    listDeletionRequests as api_admin_deletion_requests_listDeletionRequests
+} from "~backend/admin/deletion-requests";
+import {
     getLinks as api_admin_links_getLinks,
     updateLinks as api_admin_links_updateLinks
 } from "~backend/admin/links";
@@ -121,9 +128,12 @@ export namespace admin {
             this.baseClient = baseClient
             this.getBrokers = this.getBrokers.bind(this)
             this.getCgv = this.getCgv.bind(this)
+            this.getDeletionAudit = this.getDeletionAudit.bind(this)
+            this.getDeletionStats = this.getDeletionStats.bind(this)
             this.getLinks = this.getLinks.bind(this)
             this.getPricing = this.getPricing.bind(this)
             this.getPromo = this.getPromo.bind(this)
+            this.listDeletionRequests = this.listDeletionRequests.bind(this)
             this.login = this.login.bind(this)
             this.logout = this.logout.bind(this)
             this.updateBrokers = this.updateBrokers.bind(this)
@@ -152,6 +162,18 @@ export namespace admin {
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_admin_cgv_getCgv>
         }
 
+        public async getDeletionAudit(params: { request_id: string }): Promise<ResponseType<typeof api_admin_deletion_requests_getDeletionAudit>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/admin/deletion-requests/${encodeURIComponent(params.request_id)}/audit`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_admin_deletion_requests_getDeletionAudit>
+        }
+
+        public async getDeletionStats(): Promise<ResponseType<typeof api_admin_deletion_requests_getDeletionStats>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/admin/deletion-requests/stats`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_admin_deletion_requests_getDeletionStats>
+        }
+
         /**
          * Gets the links config.
          */
@@ -177,6 +199,20 @@ export namespace admin {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI(`/admin/config/promo`, {method: "GET", body: undefined})
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_admin_promo_getPromo>
+        }
+
+        public async listDeletionRequests(params: RequestType<typeof api_admin_deletion_requests_listDeletionRequests>): Promise<ResponseType<typeof api_admin_deletion_requests_listDeletionRequests>> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                email:  params.email,
+                limit:  params.limit === undefined ? undefined : String(params.limit),
+                offset: params.offset === undefined ? undefined : String(params.offset),
+                status: params.status,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/admin/deletion-requests`, {query, method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_admin_deletion_requests_listDeletionRequests>
         }
 
         /**
@@ -523,6 +559,81 @@ export namespace stripe {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI(`/stripe/test-key`, {method: "GET", body: undefined})
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_stripe_test_testStripeKey>
+        }
+    }
+}
+
+/**
+ * Import the endpoint handlers to derive the types for the client.
+ */
+import { cancelDeletion as api_user_cancel_deletion_cancelDeletion } from "~backend/user/cancel-deletion";
+import {
+    getConsentPreferences as api_user_consent_getConsentPreferences,
+    revokeConsent as api_user_consent_revokeConsent,
+    saveConsentPreferences as api_user_consent_saveConsentPreferences,
+    updateConsentPreferences as api_user_consent_updateConsentPreferences
+} from "~backend/user/consent";
+import {
+    confirmDeletion as api_user_delete_confirmDeletion,
+    requestDeletion as api_user_delete_requestDeletion
+} from "~backend/user/delete";
+
+export namespace user {
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.cancelDeletion = this.cancelDeletion.bind(this)
+            this.confirmDeletion = this.confirmDeletion.bind(this)
+            this.getConsentPreferences = this.getConsentPreferences.bind(this)
+            this.requestDeletion = this.requestDeletion.bind(this)
+            this.revokeConsent = this.revokeConsent.bind(this)
+            this.saveConsentPreferences = this.saveConsentPreferences.bind(this)
+            this.updateConsentPreferences = this.updateConsentPreferences.bind(this)
+        }
+
+        public async cancelDeletion(params: RequestType<typeof api_user_cancel_deletion_cancelDeletion>): Promise<ResponseType<typeof api_user_cancel_deletion_cancelDeletion>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/user/delete/cancel`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_user_cancel_deletion_cancelDeletion>
+        }
+
+        public async confirmDeletion(params: RequestType<typeof api_user_delete_confirmDeletion>): Promise<ResponseType<typeof api_user_delete_confirmDeletion>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/user/delete/confirm`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_user_delete_confirmDeletion>
+        }
+
+        public async getConsentPreferences(params: { user_identifier: string }): Promise<ResponseType<typeof api_user_consent_getConsentPreferences>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/user/consent/${encodeURIComponent(params.user_identifier)}`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_user_consent_getConsentPreferences>
+        }
+
+        public async requestDeletion(params: RequestType<typeof api_user_delete_requestDeletion>): Promise<ResponseType<typeof api_user_delete_requestDeletion>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/user/delete`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_user_delete_requestDeletion>
+        }
+
+        public async revokeConsent(params: { user_identifier: string }): Promise<ResponseType<typeof api_user_consent_revokeConsent>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/user/consent/${encodeURIComponent(params.user_identifier)}`, {method: "DELETE", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_user_consent_revokeConsent>
+        }
+
+        public async saveConsentPreferences(params: RequestType<typeof api_user_consent_saveConsentPreferences>): Promise<ResponseType<typeof api_user_consent_saveConsentPreferences>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/user/consent`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_user_consent_saveConsentPreferences>
+        }
+
+        public async updateConsentPreferences(params: RequestType<typeof api_user_consent_updateConsentPreferences>): Promise<ResponseType<typeof api_user_consent_updateConsentPreferences>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/user/consent`, {method: "PUT", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_user_consent_updateConsentPreferences>
         }
     }
 }
