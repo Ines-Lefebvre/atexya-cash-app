@@ -220,16 +220,16 @@ export default function Page5Calcul({ appState, setAppState }: Props) {
     if (hasValidated && errors[fieldName]) {
       const newErrors = { ...errors };
       
-      let isValid = false;
+      let isValid: boolean = false;
       switch (fieldName) {
         case 'siren':
-          isValid = tempData.siren && /^\d{9}$/.test(tempData.siren);
+          isValid = !!(tempData.siren && /^\d{9}$/.test(tempData.siren));
           break;
         case 'effectif_global':
-          isValid = tempData.effectif_global && tempData.effectif_global >= 20 && tempData.effectif_global <= 100;
+          isValid = !!(tempData.effectif_global && tempData.effectif_global >= 20 && tempData.effectif_global <= 100);
           break;
         case 'ctn':
-          isValid = tempData.ctn && tempData.ctn !== 'B';
+          isValid = !!(tempData.ctn && tempData.ctn !== 'B');
           break;
         case 'choix_garantie':
           isValid = !!tempData.choix_garantie;

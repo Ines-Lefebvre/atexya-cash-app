@@ -1,4 +1,5 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 // Mock the ~encore/clients module before any imports
 vi.mock('~encore/clients', () => ({
@@ -40,8 +41,8 @@ describe('calculatePricing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     // Setup default mocks for each test
-    (admin.getPricing as vi.Mock).mockResolvedValue(defaultPricingConfig);
-    (admin.getPromo as vi.Mock).mockResolvedValue(defaultPromoConfig);
+    (admin.getPricing as Mock).mockResolvedValue(defaultPricingConfig);
+    (admin.getPromo as Mock).mockResolvedValue(defaultPromoConfig);
   });
 
   it('should calculate standard and premium prices correctly without antecedents', async () => {
@@ -88,7 +89,7 @@ describe('calculatePricing', () => {
   });
 
   it('should apply promotion to premium price when active', async () => {
-    (admin.getPromo as vi.Mock).mockResolvedValue(activePromoConfig);
+    (admin.getPromo as Mock).mockResolvedValue(activePromoConfig);
 
     const params = {
       effectif_global: 50,
@@ -106,7 +107,7 @@ describe('calculatePricing', () => {
   });
 
   it('should use fallback prices if admin config service fails', async () => {
-    (admin.getPricing as vi.Mock).mockRejectedValue(new Error('Admin service down'));
+    (admin.getPricing as Mock).mockRejectedValue(new Error('Admin service down'));
 
     const params = {
       effectif_global: 50,

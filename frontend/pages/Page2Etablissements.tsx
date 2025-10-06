@@ -199,10 +199,10 @@ export default function Page2Etablissements({ appState, setAppState }: Props) {
       
       if (!etab) return;
       
-      let isValid = false;
+      let isValid: boolean = false;
       switch (fieldType) {
         case 'siret':
-          isValid = etab.siret && etab.siret.length === 14;
+          isValid = !!(etab.siret && etab.siret.length === 14);
           break;
         case 'nom':
           isValid = (etab.nom || '').trim() !== '';
@@ -211,7 +211,7 @@ export default function Page2Etablissements({ appState, setAppState }: Props) {
           isValid = (etab.adresse || '').trim() !== '';
           break;
         case 'code':
-          isValid = etab.code_postal && etab.code_postal.length === 5;
+          isValid = !!(etab.code_postal && etab.code_postal.length === 5);
           break;
         case 'ville':
           isValid = (etab.ville || '').trim() !== '';

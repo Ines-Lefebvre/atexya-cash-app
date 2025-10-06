@@ -63,14 +63,8 @@ export default function AdminDashboard() {
   const [contracts, setContracts] = useState<any[]>([]);
   const [contractsLoading, setContractsLoading] = useState(false);
 
-  // Create authenticated backend client with cookie support
-  const adminBackend = backend.with({
-    auth: () => {
-      // L'authentification se fait via les cookies HTTP-only
-      // Pas besoin de token explicite
-      return {};
-    }
-  });
+  // Use default backend client - authentication is handled via cookies
+  const adminBackend = backend;
 
   useEffect(() => {
     const fetchConfigs = async () => {

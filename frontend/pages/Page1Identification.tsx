@@ -265,7 +265,7 @@ export default function Page1Identification({ appState, setAppState }: Props) {
             <div className="flex space-x-4">
               <Input
                 id="siren"
-                ref={el => hasValidated && errors.siren && !firstErrorRef.current ? firstErrorRef.current = el : null}
+                ref={el => { if (hasValidated && errors.siren && !firstErrorRef.current) { firstErrorRef.current = el; } }}
                 value={siren}
                 onChange={(e) => setSiren(e.target.value.replace(/\D/g, ''))}
                 onFocus={() => handleFieldFocus('siren')}
@@ -313,7 +313,7 @@ export default function Page1Identification({ appState, setAppState }: Props) {
                     </Label>
                     <Input
                       id="manual-nom"
-                      ref={el => hasValidated && errors.manualNom && !firstErrorRef.current ? firstErrorRef.current = el : null}
+                      ref={el => { if (hasValidated && errors.manualNom && !firstErrorRef.current) { firstErrorRef.current = el; } }}
                       value={manualData.nom}
                       onChange={(e) => setManualData(prev => ({ ...prev, nom: e.target.value }))}
                       onFocus={() => handleFieldFocus('manualNom')}
@@ -332,7 +332,7 @@ export default function Page1Identification({ appState, setAppState }: Props) {
                     </Label>
                     <Input
                       id="manual-adresse"
-                      ref={el => hasValidated && errors.manualAdresse && !firstErrorRef.current ? firstErrorRef.current = el : null}
+                      ref={el => { if (hasValidated && errors.manualAdresse && !firstErrorRef.current) { firstErrorRef.current = el; } }}
                       value={manualData.adresse}
                       onChange={(e) => setManualData(prev => ({ ...prev, adresse: e.target.value }))}
                       onFocus={() => handleFieldFocus('manualAdresse')}
@@ -351,7 +351,7 @@ export default function Page1Identification({ appState, setAppState }: Props) {
                     </Label>
                     <Input
                       id="manual-code-postal"
-                      ref={el => hasValidated && errors.manualCodePostal && !firstErrorRef.current ? firstErrorRef.current = el : null}
+                      ref={el => { if (hasValidated && errors.manualCodePostal && !firstErrorRef.current) { firstErrorRef.current = el; } }}
                       value={manualData.code_postal}
                       onChange={(e) => setManualData(prev => ({ ...prev, code_postal: e.target.value.replace(/\D/g, '') }))}
                       onFocus={() => handleFieldFocus('manualCodePostal')}
@@ -371,7 +371,7 @@ export default function Page1Identification({ appState, setAppState }: Props) {
                     </Label>
                     <Input
                       id="manual-ville"
-                      ref={el => hasValidated && errors.manualVille && !firstErrorRef.current ? firstErrorRef.current = el : null}
+                      ref={el => { if (hasValidated && errors.manualVille && !firstErrorRef.current) { firstErrorRef.current = el; } }}
                       value={manualData.ville}
                       onChange={(e) => setManualData(prev => ({ ...prev, ville: e.target.value }))}
                       onFocus={() => handleFieldFocus('manualVille')}
@@ -461,7 +461,7 @@ export default function Page1Identification({ appState, setAppState }: Props) {
                 </Label>
                 <Input 
                   id="broker-code" 
-                  ref={el => hasValidated && errors.brokerCode && !firstErrorRef.current ? firstErrorRef.current = el : null}
+                  ref={el => { if (hasValidated && errors.brokerCode && !firstErrorRef.current) { firstErrorRef.current = el; } }}
                   value={brokerCode} 
                   onChange={(e) => setBrokerCode(e.target.value)}
                   onFocus={() => handleFieldFocus('brokerCode')}
