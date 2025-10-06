@@ -20,7 +20,10 @@ const defaultPricingConfig: PricingConfig = {
     5000: 300, 10000: 350, 15000: 400, 20000: 450, 30000: 550,
     50000: 650, 75000: 800, 100000: 950
   },
-  min_ttc_premium: null
+  min_ttc_premium: {
+    5000: 360, 10000: 420, 15000: 480, 20000: 540, 30000: 660,
+    50000: 780, 75000: 960, 100000: 1140
+  }
 };
 
 const defaultPromoConfig: PromoConfig = {
@@ -84,8 +87,8 @@ describe('calculatePricing', () => {
 
     const result = await calculatePricing(params);
 
-    expect(result.standard_ttc).toBe(300); // plancher
-    expect(result.premium_ttc).toBeCloseTo(396); // plancher_premium * 1.1
+    expect(result.standard_ttc).toBe(300);
+    expect(result.premium_ttc).toBe(360);
   });
 
   it('should apply promotion to premium price when active', async () => {

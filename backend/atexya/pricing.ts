@@ -50,24 +50,25 @@ export const calculatePricing = api<PricingRequest, PricingResponse>(
           admin.getPromo()
         ]);
       } catch (adminError) {
-        log.warn("Failed to get admin config, using defaults", { error: adminError });
+        log.warn("Failed to get admin config, using fallback", { error: adminError });
         
-        // Fallback configuration
-        pricingConfig = {
-          pivot_headcount: 70,
-          slope: 0.5,
-          min_ttc_standard: {
-            5000: 300, 10000: 350, 15000: 400, 20000: 450, 30000: 550,
-            50000: 650, 75000: 800, 100000: 950
-          },
-          min_ttc_premium: null
-        };
-        
-        promoConfig = {
-          active: false,
-          discount_percent: 0,
-          expires: '',
-          label: ''
+        return {
+          standard_ttc: 500,
+          premium_ttc: 650,
+          promo_active: false,
+          promo_expires: '',
+          promo_label: '',
+          ht: 458.72,
+          taxes: 41.28,
+          calculation_details: {
+            effectif_corrige: 0,
+            effectif_scaled: 0,
+            taux_ctn: 0,
+            prime_brute_ht: 458.72,
+            prime_brute_ttc: 500,
+            plancher_applique: 500,
+            antecedents_multiplier: 1
+          }
         };
       }
 
@@ -146,22 +147,25 @@ export const calculatePricing = api<PricingRequest, PricingResponse>(
       
       const prime_brute_premium_ttc = prime_brute_premium_ht * 1.09;
       
-      // Le plancher premium reste à 20% de plus que le standard
-      const plancher_premium = plancher_standard * 1.2;
+      let plancher_premium: number;
+      if (pricingConfig.min_ttc_premium && pricingConfig.min_ttc_premium[choix_garantie]) {
+        plancher_premium = pricingConfig.min_ttc_premium[choix_garantie];
+      } else {
+        plancher_premium = plancher_standard * 1.2;
+      }
       
-      // Appliquer le plancher
-      let base_premium_ttc = Math.max(prime_brute_premium_ttc, plancher_premium);
-      
-      // Majoration de 10% sur le prix final (après plancher)
-      let premium_ttc = base_premium_ttc * 1.10;
+      let premium_ttc: number;
+      if (prime_brute_premium_ttc >= plancher_premium) {
+        premium_ttc = prime_brute_premium_ttc * 1.10;
+      } else {
+        premium_ttc = plancher_premium;
+      }
       
       log.info("Prime premium calculée", { 
         garantie_premium,
         calcul: `${N_scaled} * ${prob} * ${garantie_premium} * ${antecedentsMultiplier}`,
         prime_brute_premium_ht,
         prime_brute_premium_ttc,
-        plancher_premium,
-        base_premium_ttc,
         premium_ttc_final: premium_ttc
       });
       
