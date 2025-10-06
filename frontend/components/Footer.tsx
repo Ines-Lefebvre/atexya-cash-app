@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import LegalModal from './LegalModal';
 import PrivacyModal from './PrivacyModal';
+import CookiePolicyModal from './CookiePolicyModal';
 
 export default function Footer() {
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [isCookiePolicyModalOpen, setIsCookiePolicyModalOpen] = useState(false);
 
   return (
     <>
@@ -30,6 +32,9 @@ export default function Footer() {
               <button onClick={() => setIsPrivacyModalOpen(true)} className="text-sm hover:underline" style={{ fontFamily: 'Open Sans, sans-serif' }}>
                 Politique de confidentialité
               </button>
+              <button onClick={() => setIsCookiePolicyModalOpen(true)} className="text-sm hover:underline" style={{ fontFamily: 'Open Sans, sans-serif' }}>
+                Politique de cookies
+              </button>
             </div>
 
             {/* Colonne 3: Contact */}
@@ -51,6 +56,7 @@ export default function Footer() {
       </footer>
       <LegalModal isOpen={isLegalModalOpen} setIsOpen={setIsLegalModalOpen} />
       <PrivacyModal isOpen={isPrivacyModalOpen} setIsOpen={setIsPrivacyModalOpen} />
+      <CookiePolicyModal open={isCookiePolicyModalOpen} onOpenChange={setIsCookiePolicyModalOpen} />
     </>
   );
 }

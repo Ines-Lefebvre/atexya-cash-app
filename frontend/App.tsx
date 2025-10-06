@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import CookieConsentBanner from './components/CookieConsentBanner';
+import { CookieConsentProvider, useCookieConsent, ConsentPreferences } from './contexts/CookieConsentContext';
 import Page1Identification from './pages/Page1Identification';
 import Page2Etablissements from './pages/Page2Etablissements';
 import Page3Antecedents from './pages/Page3Antecedents';
@@ -55,7 +57,8 @@ export interface AppState {
   };
 }
 
-function App() {
+function AppInner() {
+  const { updateConsent, revokeConsent, hasConsented } = useCookieConsent();
   const [appState, setAppState] = useState<AppState>({
     siren: '',
     company_data: {
@@ -88,6 +91,14 @@ function App() {
       taxes: 0,
     }
   });
+
+  const handleAcceptCookies = async (preferences: ConsentPreferences) => {
+    await updateConsent(preferences);
+  };
+
+  const handleDeclineCookies = () => {
+    revokeConsent();
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -147,8 +158,22 @@ function App() {
         </main>
         <Footer />
         <Toaster />
+        {!hasConsented && (
+          <CookieConsentBanner
+            onAccept={handleAcceptCookies}
+            onDecline={handleDeclineCookies}
+          />
+        )}
       </Router>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <CookieConsentProvider>
+      <AppInner />
+    </CookieConsentProvider>
   );
 }
 
