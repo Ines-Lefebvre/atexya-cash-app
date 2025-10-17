@@ -18,9 +18,9 @@ interface CreateCheckoutSessionResponse {
   sessionId: string;
 }
 
-export const createCheckoutSession = api<CreateCheckoutSessionRequest, CreateCheckoutSessionResponse>(
+export const createCheckoutSession = api(
   { expose: true, method: "POST", path: "/api/checkout/create-session" },
-  async (params) => {
+  async (params: CreateCheckoutSessionRequest): Promise<CreateCheckoutSessionResponse> => {
     const { amount_cents, currency, customer_email, metadata } = params;
 
     if (!amount_cents || amount_cents <= 0 || typeof amount_cents !== 'number') {
