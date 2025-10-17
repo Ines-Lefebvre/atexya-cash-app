@@ -37,6 +37,7 @@ export class Client {
     public readonly atexya: atexya.ServiceClient
     public readonly checkout: checkout.ServiceClient
     public readonly stripe: stripe.ServiceClient
+    public readonly subscription: subscription.ServiceClient
     public readonly user: user.ServiceClient
     private readonly options: ClientOptions
     private readonly target: string
@@ -56,6 +57,7 @@ export class Client {
         this.atexya = new atexya.ServiceClient(base)
         this.checkout = new checkout.ServiceClient(base)
         this.stripe = new stripe.ServiceClient(base)
+        this.subscription = new subscription.ServiceClient(base)
         this.user = new user.ServiceClient(base)
     }
 
@@ -584,6 +586,209 @@ export namespace stripe {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI(`/stripe/test-key`, {method: "GET", body: undefined})
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_stripe_test_testStripeKey>
+        }
+    }
+}
+
+/**
+ * Import the endpoint handlers to derive the types for the client.
+ */
+import {
+    downloadInvoice as api_subscription_invoices_downloadInvoice,
+    getInvoice as api_subscription_invoices_getInvoice,
+    listInvoices as api_subscription_invoices_listInvoices,
+    sendInvoice as api_subscription_invoices_sendInvoice
+} from "~backend/subscription/invoices";
+import {
+    createPlan as api_subscription_plans_createPlan,
+    createPrice as api_subscription_plans_createPrice,
+    getPlan as api_subscription_plans_getPlan,
+    listPlans as api_subscription_plans_listPlans
+} from "~backend/subscription/plans";
+import {
+    createPortalSession as api_subscription_portal_createPortalSession,
+    updatePaymentMethod as api_subscription_portal_updatePaymentMethod
+} from "~backend/subscription/portal";
+import {
+    cancelSubscription as api_subscription_subscriptions_cancelSubscription,
+    createSubscription as api_subscription_subscriptions_createSubscription,
+    getSubscription as api_subscription_subscriptions_getSubscription,
+    listSubscriptions as api_subscription_subscriptions_listSubscriptions
+} from "~backend/subscription/subscriptions";
+import {
+    getUsage as api_subscription_usage_getUsage,
+    recordUsage as api_subscription_usage_recordUsage
+} from "~backend/subscription/usage";
+import { handleSubscriptionWebhook as api_subscription_webhooks_handleSubscriptionWebhook } from "~backend/subscription/webhooks";
+
+export namespace subscription {
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.cancelSubscription = this.cancelSubscription.bind(this)
+            this.createPlan = this.createPlan.bind(this)
+            this.createPortalSession = this.createPortalSession.bind(this)
+            this.createPrice = this.createPrice.bind(this)
+            this.createSubscription = this.createSubscription.bind(this)
+            this.downloadInvoice = this.downloadInvoice.bind(this)
+            this.getInvoice = this.getInvoice.bind(this)
+            this.getPlan = this.getPlan.bind(this)
+            this.getSubscription = this.getSubscription.bind(this)
+            this.getUsage = this.getUsage.bind(this)
+            this.handleSubscriptionWebhook = this.handleSubscriptionWebhook.bind(this)
+            this.listInvoices = this.listInvoices.bind(this)
+            this.listPlans = this.listPlans.bind(this)
+            this.listSubscriptions = this.listSubscriptions.bind(this)
+            this.recordUsage = this.recordUsage.bind(this)
+            this.sendInvoice = this.sendInvoice.bind(this)
+            this.updatePaymentMethod = this.updatePaymentMethod.bind(this)
+        }
+
+        public async cancelSubscription(params: RequestType<typeof api_subscription_subscriptions_cancelSubscription>): Promise<ResponseType<typeof api_subscription_subscriptions_cancelSubscription>> {
+            // Construct the body with only the fields which we want encoded within the body (excluding query string or header fields)
+            const body: Record<string, any> = {
+                "cancel_at_period_end": params["cancel_at_period_end"],
+            }
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/${encodeURIComponent(params.subscription_id)}/cancel`, {method: "POST", body: JSON.stringify(body)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_subscriptions_cancelSubscription>
+        }
+
+        public async createPlan(params: RequestType<typeof api_subscription_plans_createPlan>): Promise<ResponseType<typeof api_subscription_plans_createPlan>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/plans`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_plans_createPlan>
+        }
+
+        public async createPortalSession(params: RequestType<typeof api_subscription_portal_createPortalSession>): Promise<ResponseType<typeof api_subscription_portal_createPortalSession>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/portal`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_portal_createPortalSession>
+        }
+
+        public async createPrice(params: RequestType<typeof api_subscription_plans_createPrice>): Promise<ResponseType<typeof api_subscription_plans_createPrice>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/prices`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_plans_createPrice>
+        }
+
+        public async createSubscription(params: RequestType<typeof api_subscription_subscriptions_createSubscription>): Promise<ResponseType<typeof api_subscription_subscriptions_createSubscription>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/create`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_subscriptions_createSubscription>
+        }
+
+        public async downloadInvoice(params: { id: string }): Promise<ResponseType<typeof api_subscription_invoices_downloadInvoice>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/invoices/${encodeURIComponent(params.id)}/download`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_invoices_downloadInvoice>
+        }
+
+        public async getInvoice(params: { id: string }): Promise<ResponseType<typeof api_subscription_invoices_getInvoice>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/invoices/${encodeURIComponent(params.id)}`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_invoices_getInvoice>
+        }
+
+        public async getPlan(params: { id: string }): Promise<ResponseType<typeof api_subscription_plans_getPlan>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/plans/${encodeURIComponent(params.id)}`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_plans_getPlan>
+        }
+
+        public async getSubscription(params: { id: string }): Promise<ResponseType<typeof api_subscription_subscriptions_getSubscription>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/${encodeURIComponent(params.id)}`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_subscriptions_getSubscription>
+        }
+
+        public async getUsage(params: RequestType<typeof api_subscription_usage_getUsage>): Promise<ResponseType<typeof api_subscription_usage_getUsage>> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "end_date":   params["end_date"],
+                "start_date": params["start_date"],
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/${encodeURIComponent(params.subscription_id)}/usage`, {query, method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_usage_getUsage>
+        }
+
+        public async handleSubscriptionWebhook(params: RequestType<typeof api_subscription_webhooks_handleSubscriptionWebhook>): Promise<ResponseType<typeof api_subscription_webhooks_handleSubscriptionWebhook>> {
+            // Convert our params into the objects we need for the request
+            const headers = makeRecord<string, string>({
+                "stripe-signature": params.signature,
+            })
+
+            // Construct the body with only the fields which we want encoded within the body (excluding query string or header fields)
+            const body: Record<string, any> = {
+                body: params.body,
+            }
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/webhooks`, {headers, method: "POST", body: JSON.stringify(body)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_webhooks_handleSubscriptionWebhook>
+        }
+
+        public async listInvoices(params: RequestType<typeof api_subscription_invoices_listInvoices>): Promise<ResponseType<typeof api_subscription_invoices_listInvoices>> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "customer_email":  params["customer_email"],
+                status:            params.status,
+                "subscription_id": params["subscription_id"],
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/invoices`, {query, method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_invoices_listInvoices>
+        }
+
+        public async listPlans(): Promise<ResponseType<typeof api_subscription_plans_listPlans>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/plans`, {method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_plans_listPlans>
+        }
+
+        public async listSubscriptions(params: RequestType<typeof api_subscription_subscriptions_listSubscriptions>): Promise<ResponseType<typeof api_subscription_subscriptions_listSubscriptions>> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "customer_email": params["customer_email"],
+                status:           params.status,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/list`, {query, method: "GET", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_subscriptions_listSubscriptions>
+        }
+
+        public async recordUsage(params: RequestType<typeof api_subscription_usage_recordUsage>): Promise<ResponseType<typeof api_subscription_usage_recordUsage>> {
+            // Construct the body with only the fields which we want encoded within the body (excluding query string or header fields)
+            const body: Record<string, any> = {
+                action:            params.action,
+                "idempotency_key": params["idempotency_key"],
+                quantity:          params.quantity,
+                timestamp:         params.timestamp,
+            }
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/${encodeURIComponent(params.subscription_id)}/usage`, {method: "POST", body: JSON.stringify(body)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_usage_recordUsage>
+        }
+
+        public async sendInvoice(params: { id: string }): Promise<ResponseType<typeof api_subscription_invoices_sendInvoice>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/invoices/${encodeURIComponent(params.id)}/send`, {method: "POST", body: undefined})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_invoices_sendInvoice>
+        }
+
+        public async updatePaymentMethod(params: RequestType<typeof api_subscription_portal_updatePaymentMethod>): Promise<ResponseType<typeof api_subscription_portal_updatePaymentMethod>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/subscription/update-payment`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_subscription_portal_updatePaymentMethod>
         }
     }
 }
