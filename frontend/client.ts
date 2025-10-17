@@ -351,9 +351,6 @@ export namespace atexya {
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_atexya_pricing_calculatePricing>
         }
 
-        /**
-         * Crée un nouveau contrat (public car nécessaire pour la souscription)
-         */
         public async createContract(params: RequestType<typeof api_atexya_contracts_createContract>): Promise<ResponseType<typeof api_atexya_contracts_createContract>> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI(`/contracts/create`, {method: "POST", body: JSON.stringify(params)})
