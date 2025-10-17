@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { useCookieConsent } from "../contexts/CookieConsentContext";
 
 export function useAnalytics() {
