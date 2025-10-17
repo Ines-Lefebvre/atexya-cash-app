@@ -77,17 +77,23 @@ export const handleWebhook = api<WebhookRequest, WebhookResponse>(
 
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
   try {
-    log.info("Processing checkout session completed", { sessionId: session.id });
+    log.info("Processing checkout session completed", { 
+      sessionId: session.id,
+      paymentStatus: session.payment_status,
+      amountTotal: session.amount_total
+    });
 
     const metadata = session.metadata || {};
     const contractId = metadata.contract_id;
 
     if (!contractId) {
-      log.warn("No contract ID in session metadata", { sessionId: session.id });
+      log.info("No contract ID in session metadata - simple checkout session", { 
+        sessionId: session.id,
+        metadata 
+      });
       return;
     }
 
-    // Mettre à jour le statut du contrat
     await atexya.updateContractStatus({
       contract_id: contractId,
       payment_status: 'paid',
@@ -100,7 +106,6 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       }
     });
 
-    // Envoyer notification de succès
     if (session.customer_details?.email) {
       await atexya.notifyPaymentSuccess({
         contract_id: contractId,
@@ -111,9 +116,8 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       });
     }
 
-    // Notifier commission courtier si applicable
     if (metadata.broker_code) {
-      const commissionAmount = Math.round((session.amount_total || 0) * 0.15); // 15% de commission
+      const commissionAmount = Math.round((session.amount_total || 0) * 0.15);
       await atexya.notifyBrokerCommission({
         broker_code: metadata.broker_code,
         contract_id: contractId,

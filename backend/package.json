@@ -8,12 +8,12 @@
     "test": "vitest"
   },
   "dependencies": {
-    "encore.dev": "^1.50.4",
-    "jsonwebtoken": "^9.0.2",
-    "stripe": "^17.7.0"
+    "encore.dev": "^1.50.6",
+    "jsonwebtoken": "^^9.0.2",
+    "stripe": "^^17.7.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
-    "vitest": "^3.0.9"
+    "typescript": "^^5.8.3",
+    "vitest": "^^3.0.9"
   }
 }

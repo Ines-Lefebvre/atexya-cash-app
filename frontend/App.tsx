@@ -16,6 +16,8 @@ import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import PaymentSuccess from './pages/PaymentSuccess';
 import DataDeletion from './pages/DataDeletion';
+import CheckoutSuccess from './pages/CheckoutSuccess';
+import CheckoutCancel from './pages/CheckoutCancel';
 
 export interface AppState {
   siren: string;
@@ -145,6 +147,14 @@ function AppInner() {
             <Route 
               path="/payment-success" 
               element={<PaymentSuccess />} 
+            />
+            <Route 
+              path="/checkout/success" 
+              element={<CheckoutSuccess />} 
+            />
+            <Route 
+              path="/checkout/cancel" 
+              element={<CheckoutCancel />} 
             />
             <Route 
               path="/user/delete" 
