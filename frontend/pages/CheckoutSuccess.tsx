@@ -27,7 +27,7 @@ export default function CheckoutSuccess() {
         setSessionData(data);
       } catch (err: any) {
         console.error('Erreur lors de la récupération de la session:', err);
-        setError('Impossible de récupérer les informations de paiement');
+        setError(err.message || 'Impossible de récupérer les informations de paiement');
       } finally {
         setLoading(false);
       }

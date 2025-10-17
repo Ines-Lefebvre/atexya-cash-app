@@ -89,7 +89,16 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
     if (!contractId) {
       log.info("No contract ID in session metadata - simple checkout session", { 
         sessionId: session.id,
-        metadata 
+        metadata,
+        paymentStatus: session.payment_status
+      });
+      return;
+    }
+
+    if (session.payment_status !== 'paid') {
+      log.warn("Checkout session completed but not paid", {
+        sessionId: session.id,
+        paymentStatus: session.payment_status
       });
       return;
     }

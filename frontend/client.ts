@@ -35,6 +35,7 @@ const BROWSER = typeof globalThis === "object" && ("window" in globalThis);
 export class Client {
     public readonly admin: admin.ServiceClient
     public readonly atexya: atexya.ServiceClient
+    public readonly checkout: checkout.ServiceClient
     public readonly stripe: stripe.ServiceClient
     public readonly user: user.ServiceClient
     private readonly options: ClientOptions
@@ -53,6 +54,7 @@ export class Client {
         const base = new BaseClient(this.target, this.options)
         this.admin = new admin.ServiceClient(base)
         this.atexya = new atexya.ServiceClient(base)
+        this.checkout = new checkout.ServiceClient(base)
         this.stripe = new stripe.ServiceClient(base)
         this.user = new user.ServiceClient(base)
     }
@@ -487,7 +489,29 @@ export namespace atexya {
 /**
  * Import the endpoint handlers to derive the types for the client.
  */
-import { createCheckoutSession as api_stripe_checkout_createCheckoutSession } from "~backend/stripe/checkout";
+import { createCheckoutSession as api_checkout_create_session_createCheckoutSession } from "~backend/checkout/create-session";
+
+export namespace checkout {
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.createCheckoutSession = this.createCheckoutSession.bind(this)
+        }
+
+        public async createCheckoutSession(params: RequestType<typeof api_checkout_create_session_createCheckoutSession>): Promise<ResponseType<typeof api_checkout_create_session_createCheckoutSession>> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI(`/api/checkout/create-session`, {method: "POST", body: JSON.stringify(params)})
+            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_checkout_create_session_createCheckoutSession>
+        }
+    }
+}
+
+/**
+ * Import the endpoint handlers to derive the types for the client.
+ */
 import {
     createPaymentSession as api_stripe_stripe_createPaymentSession,
     createRefund as api_stripe_stripe_createRefund,
@@ -503,18 +527,11 @@ export namespace stripe {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
-            this.createCheckoutSession = this.createCheckoutSession.bind(this)
             this.createPaymentSession = this.createPaymentSession.bind(this)
             this.createRefund = this.createRefund.bind(this)
             this.getSession = this.getSession.bind(this)
             this.handleWebhook = this.handleWebhook.bind(this)
             this.testStripeKey = this.testStripeKey.bind(this)
-        }
-
-        public async createCheckoutSession(params: RequestType<typeof api_stripe_checkout_createCheckoutSession>): Promise<ResponseType<typeof api_stripe_checkout_createCheckoutSession>> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI(`/api/checkout/create-session`, {method: "POST", body: JSON.stringify(params)})
-            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_stripe_checkout_createCheckoutSession>
         }
 
         /**

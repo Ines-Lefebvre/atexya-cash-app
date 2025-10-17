@@ -53,11 +53,29 @@ export default function PaymentOptions({
     setLoading(true);
     
     try {
-      const currentPrice = getCurrentPrice(selectedProduct === 'premium' ? premiumPrice : standardPrice);
+      const testResult = await backend.stripe.testStripeKey();
       
-      const { sessionId } = await backend.stripe.createCheckoutSession({
-        amount: currentPrice,
-        currency: 'EUR',
+      if (!testResult.valid) {
+        toast({
+          title: 'Service indisponible',
+          description: 'Le service de paiement est temporairement indisponible. Veuillez réessayer plus tard.',
+          variant: 'destructive'
+        });
+        setLoading(false);
+        return;
+      }
+
+      const currentPrice = getCurrentPrice(selectedProduct === 'premium' ? premiumPrice : standardPrice);
+      const amountInCents = Math.round(currentPrice * 100);
+      
+      if (!amountInCents || amountInCents <= 0) {
+        throw new Error('Montant invalide');
+      }
+      
+      const { sessionId } = await backend.checkout.createCheckoutSession({
+        amount_cents: amountInCents,
+        currency: 'eur',
+        customer_email: undefined,
         metadata: {
           payment_type: paymentType,
           product_type: selectedProduct

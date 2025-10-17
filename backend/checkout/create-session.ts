@@ -1,14 +1,14 @@
 import { api, APIError } from "encore.dev/api";
 import { secret } from "encore.dev/config";
 import Stripe from "stripe";
-import { stripeDB } from "./stripe";
+import { stripeDB } from "../stripe/stripe";
 import { safeLog, hashValue } from "../utils/safeLog";
 
 const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
 const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
 
 interface CreateCheckoutSessionRequest {
-  amount: number;
+  amount_cents: number;
   currency: string;
   customer_email?: string;
   metadata?: Record<string, string>;
@@ -21,10 +21,10 @@ interface CreateCheckoutSessionResponse {
 export const createCheckoutSession = api<CreateCheckoutSessionRequest, CreateCheckoutSessionResponse>(
   { expose: true, method: "POST", path: "/api/checkout/create-session" },
   async (params) => {
-    const { amount, currency, customer_email, metadata } = params;
+    const { amount_cents, currency, customer_email, metadata } = params;
 
-    if (!amount || amount <= 0) {
-      throw APIError.invalidArgument("Le montant doit être supérieur à 0");
+    if (!amount_cents || amount_cents <= 0 || typeof amount_cents !== 'number') {
+      throw APIError.invalidArgument("Le montant doit être un nombre supérieur à 0 (en centimes)");
     }
 
     if (!currency || !/^[A-Z]{3}$/i.test(currency)) {
@@ -35,7 +35,7 @@ export const createCheckoutSession = api<CreateCheckoutSessionRequest, CreateChe
 
     try {
       safeLog.info("Creating checkout session", {
-        amount,
+        amount_cents,
         currency: normalizedCurrency,
         emailHash: customer_email ? hashValue(customer_email) : undefined
       });
@@ -51,7 +51,7 @@ export const createCheckoutSession = api<CreateCheckoutSessionRequest, CreateChe
             product_data: {
               name: "Commande",
             },
-            unit_amount: Math.round(amount * 100),
+            unit_amount: amount_cents,
           },
           quantity: 1,
         }],
@@ -68,7 +68,7 @@ export const createCheckoutSession = api<CreateCheckoutSessionRequest, CreateChe
 
       const sessionMetadata = {
         ...metadata,
-        amount: amount.toString(),
+        amount_cents: amount_cents.toString(),
         currency: normalizedCurrency,
       };
 
@@ -80,9 +80,9 @@ export const createCheckoutSession = api<CreateCheckoutSessionRequest, CreateChe
           ${session.id}, 
           ${session.customer || ""}, 
           ${metadata?.contract_id || ""}, 
-          ${"annual"}, 
-          ${"standard"},
-          ${Math.round(amount * 100)}, 
+          ${metadata?.payment_type || "annual"}, 
+          ${metadata?.product_type || "standard"},
+          ${amount_cents}, 
           ${normalizedCurrency}, 
           ${session.status || "open"},
           ${new Date().toISOString()}, 
@@ -93,7 +93,7 @@ export const createCheckoutSession = api<CreateCheckoutSessionRequest, CreateChe
 
       safeLog.info("Checkout session created", {
         sessionId: session.id,
-        amount,
+        amount_cents,
         currency: normalizedCurrency
       });
 
@@ -102,7 +102,7 @@ export const createCheckoutSession = api<CreateCheckoutSessionRequest, CreateChe
     } catch (error: any) {
       safeLog.error("Error creating checkout session", { 
         error: error.message,
-        amount,
+        amount_cents,
         currency: normalizedCurrency
       });
 
