@@ -71,6 +71,9 @@ interface CreateContractRequest {
   cgv_version: string;
   metadata?: Record<string, any>;
   idempotency_key: string;
+  headcount: number;
+  amount_cents: number;
+  currency?: string;
 }
 
 interface CreateContractResponse {
@@ -109,7 +112,14 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
   { expose: true, method: "POST", path: "/contracts/create" },
   async (params) => {
     try {
-      // Vérifier si un contrat avec cette clé d'idempotence existe déjà
+      if (!Number.isInteger(params.headcount) || params.headcount <= 0) {
+        throw APIError.invalidArgument("Invalid headcount: must be a positive integer");
+      }
+      
+      if (!Number.isInteger(params.amount_cents) || params.amount_cents <= 0) {
+        throw APIError.invalidArgument("Invalid amount_cents: must be a positive integer");
+      }
+      
       const existingContract = await contractsDB.rawQueryRow<any>(
         `SELECT id FROM contracts WHERE idempotency_key = $1 LIMIT 1`,
         params.idempotency_key
@@ -138,7 +148,8 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
           contract_type, garantie_amount, premium_ttc, premium_ht, taxes, payment_type,
           broker_code, broker_commission_percent, broker_commission_amount,
           payment_status, stripe_session_id, stripe_customer_id, stripe_subscription_id,
-          cgv_version, contract_start_date, contract_end_date, created_at, updated_at, metadata, idempotency_key
+          cgv_version, contract_start_date, contract_end_date, created_at, updated_at, metadata, idempotency_key,
+          headcount, amount_cents, currency
         ) VALUES (
           ${contractId}, ${params.siren}, ${params.company_name}, 
           ${params.customer_email}, ${params.customer_name}, ${params.customer_phone},
@@ -147,7 +158,8 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
           ${params.broker_code}, ${params.broker_commission_percent}, ${brokerCommissionAmount},
           'pending', ${params.stripe_session_id}, ${params.stripe_customer_id}, 
           ${params.stripe_subscription_id}, ${params.cgv_version},
-          ${startDate}, ${endDate}, ${now}, ${now}, ${JSON.stringify(params.metadata || {})}, ${params.idempotency_key}
+          ${startDate}, ${endDate}, ${now}, ${now}, ${JSON.stringify(params.metadata || {})}, ${params.idempotency_key},
+          ${params.headcount}, ${params.amount_cents}, ${params.currency || 'EUR'}
         )
       `;
 
@@ -157,7 +169,9 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
         amount: params.premium_ttc,
         paymentType: params.payment_type,
         stripeSessionIdHash: params.stripe_session_id ? hashValue(params.stripe_session_id) : undefined,
-        brokerCommission: brokerCommissionAmount
+        brokerCommission: brokerCommissionAmount,
+        headcount: params.headcount,
+        amountCents: params.amount_cents
       });
 
       return { contract_id: contractId };
@@ -175,6 +189,8 @@ interface UpdateContractStatusRequest {
   stripe_session_id?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
+  payment_intent_id?: string;
+  stripe_amount_total?: number;
   metadata?: Record<string, any>;
 }
 
@@ -204,6 +220,16 @@ export const updateContractStatus = api<UpdateContractStatusRequest, { success: 
       if (params.stripe_subscription_id) {
         updates.push(`stripe_subscription_id = $${placeholderIndex++}`);
         values.push(params.stripe_subscription_id);
+      }
+
+      if (params.payment_intent_id) {
+        updates.push(`payment_intent_id = $${placeholderIndex++}`);
+        values.push(params.payment_intent_id);
+      }
+
+      if (params.stripe_amount_total !== undefined) {
+        updates.push(`stripe_amount_total = $${placeholderIndex++}`);
+        values.push(params.stripe_amount_total);
       }
 
       if (params.metadata) {

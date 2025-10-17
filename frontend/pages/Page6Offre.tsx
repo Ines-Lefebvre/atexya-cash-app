@@ -10,6 +10,7 @@ import backend from '~backend/client';
 import { AppState } from '../App';
 import PaymentOptions from '../components/PaymentOptions';
 import PaymentConfirmationModal from '../components/PaymentConfirmationModal';
+import { computePricing } from '@/lib/pricing';
 
 interface Props {
   appState: AppState;
@@ -122,15 +123,26 @@ export default function Page6Offre({ appState, setAppState }: Props) {
     setIsProcessing(true);
 
     try {
+      const effectifNum = Number(appState.effectif_global);
+      if (!Number.isInteger(effectifNum) || effectifNum <= 0) {
+        throw new Error('Invalid effectif_global: must be a positive integer');
+      }
+
+      const pricingCalc = computePricing({
+        plan: selectedProductType,
+        billingCycle: selectedPaymentType,
+        headcount: effectifNum,
+        pricing: {
+          standard_ttc: appState.tarifs.standard_ttc,
+          premium_ttc: appState.tarifs.premium_ttc
+        }
+      });
+
       const isStandard = selectedProductType === 'standard';
-      const baseAmount = isStandard ? appState.tarifs.standard_ttc : appState.tarifs.premium_ttc;
-      const finalAmount = selectedPaymentType === 'monthly' ? Math.round((baseAmount * 1.20) / 12 * 100) / 100 : baseAmount;
       const garantie = isStandard ? appState.choix_garantie : getGarantiePremium();
 
-      // Générer une clé d'idempotence unique pour cette transaction
       const idempotencyKey = `${appState.siren}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Créer d'abord le contrat en base
       const contractResponse = await backend.atexya.createContract({
         siren: appState.siren,
         company_name: appState.company_data.denomination,
@@ -139,7 +151,7 @@ export default function Page6Offre({ appState, setAppState }: Props) {
         customer_phone: customerInfo.phone,
         contract_type: selectedProductType,
         garantie_amount: garantie,
-        premium_ttc: Math.round(finalAmount * 100), // en centimes
+        premium_ttc: pricingCalc.amount_cents,
         premium_ht: Math.round((appState.tarifs.ht || 0) * 100),
         taxes: Math.round((appState.tarifs.taxes || 0) * 100),
         payment_type: selectedPaymentType,
@@ -148,18 +160,20 @@ export default function Page6Offre({ appState, setAppState }: Props) {
         cgv_version: "2025-01",
         metadata: {
           ctn: appState.ctn,
-          effectif_global: appState.effectif_global,
+          effectif_global: effectifNum,
           antecedents: appState.antecedents,
           etablissements: appState.etablissements
         },
-        idempotency_key: `contract_${idempotencyKey}`
+        idempotency_key: `contract_${idempotencyKey}`,
+        headcount: effectifNum,
+        amount_cents: pricingCalc.amount_cents,
+        currency: 'EUR'
       });
 
-      // Préparer les données pour Stripe
       const quoteData = {
         companyName: appState.company_data.denomination,
         sirenNumber: appState.siren,
-        effectif: appState.effectif_global,
+        effectif: effectifNum,
         secteurCTN: appState.ctn,
         garantieAmount: garantie,
         priceStandard: appState.tarifs.standard_ttc,
@@ -176,13 +190,14 @@ export default function Page6Offre({ appState, setAppState }: Props) {
         productType: selectedProductType
       };
 
-      // Créer la session Stripe
       const stripeResponse = await backend.stripe.createPaymentSession({
         quoteData,
         paymentOption,
         cgvVersion: "2025-01",
         contractId: contractResponse.contract_id,
-        idempotencyKey: `stripe_${idempotencyKey}`
+        idempotencyKey: `stripe_${idempotencyKey}`,
+        headcount: effectifNum,
+        amount_cents: pricingCalc.amount_cents
       });
 
       // Mettre à jour le contrat avec les infos Stripe
@@ -450,6 +465,7 @@ export default function Page6Offre({ appState, setAppState }: Props) {
                 promoLabel={appState.tarifs.promo_label}
                 onPaymentSelect={handlePaymentSelect}
                 isProcessing={isProcessing}
+                headcount={Number(appState.effectif_global)}
               />
             </CardContent>
           </Card>
@@ -498,10 +514,12 @@ export default function Page6Offre({ appState, setAppState }: Props) {
         onConfirm={handleConfirmPayment}
         paymentType={selectedPaymentType}
         productType={selectedProductType}
-        amount={selectedPaymentType === 'monthly' 
-          ? Math.round(((selectedProductType === 'premium' ? appState.tarifs.premium_ttc : appState.tarifs.standard_ttc) * 1.20) / 12 * 100) / 100
-          : (selectedProductType === 'premium' ? appState.tarifs.premium_ttc : appState.tarifs.standard_ttc)
-        }
+        amount={computePricing({
+          plan: selectedProductType,
+          billingCycle: selectedPaymentType,
+          headcount: Number(appState.effectif_global),
+          pricing: { standard_ttc: appState.tarifs.standard_ttc, premium_ttc: appState.tarifs.premium_ttc }
+        }).priceEUR}
         companyName={appState.company_data.denomination}
         garantieAmount={appState.choix_garantie}
       />

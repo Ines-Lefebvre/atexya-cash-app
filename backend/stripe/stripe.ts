@@ -41,6 +41,8 @@ interface CreatePaymentSessionRequest {
   cgvVersion: string;
   contractId?: string;
   idempotencyKey: string;
+  headcount: number;
+  amount_cents: number;
 }
 
 interface CreatePaymentSessionResponse {
@@ -54,8 +56,20 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
   { expose: true, method: "POST", path: "/stripe/create-payment-session" },
   async (params) => {
     try {
-      const { quoteData, paymentOption, cgvVersion, contractId, idempotencyKey } = params;
+      const { quoteData, paymentOption, cgvVersion, contractId, idempotencyKey, headcount, amount_cents } = params;
       const { type: paymentType, productType } = paymentOption;
+
+      if (!Number.isInteger(headcount) || headcount <= 0) {
+        throw APIError.invalidArgument("Invalid headcount: must be a positive integer");
+      }
+
+      if (!Number.isInteger(amount_cents) || amount_cents <= 0) {
+        throw APIError.invalidArgument("Invalid amount_cents: must be a positive integer");
+      }
+
+      if (!Number.isInteger(quoteData.effectif) || quoteData.effectif <= 0) {
+        throw APIError.invalidArgument("Invalid effectif in quoteData: must be a positive integer");
+      }
 
       // Vérifier si une session existe déjà avec cette clé d'idempotence
       const existingSession = await stripeDB.rawQueryRow<any>(
@@ -79,16 +93,29 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         };
       }
 
-      // Calcul du prix
       const basePrice = productType === 'premium' ? quoteData.pricePremium : quoteData.priceStandard;
-      const finalPrice = paymentType === 'monthly' ? Math.round((basePrice * 1.20) / 12) : basePrice;
+      const expectedFinalPrice = paymentType === 'monthly' ? Math.round((basePrice * 1.20) / 12) : basePrice;
+      const expectedAmountCents = Math.round(expectedFinalPrice * 100);
+
+      if (Math.abs(amount_cents - expectedAmountCents) > 1) {
+        safeLog.error("Amount mismatch detected", {
+          receivedAmountCents: amount_cents,
+          expectedAmountCents,
+          basePrice,
+          paymentType,
+          productType
+        });
+        throw APIError.invalidArgument(`Amount mismatch: expected ${expectedAmountCents} cents, received ${amount_cents} cents`);
+      }
 
       safeLog.info("Creating Stripe payment session", {
         sirenHash: hashValue(quoteData.sirenNumber),
         paymentType,
         productType,
         basePrice,
-        finalPrice
+        finalPrice: expectedFinalPrice,
+        amountCents: amount_cents,
+        headcount
       });
 
       // Créer ou récupérer le client Stripe
@@ -137,16 +164,16 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         });
       }
 
-      // Créer le prix
       const priceParams: Stripe.PriceCreateParams = {
-        unit_amount: Math.round(finalPrice * 100), // en centimes
+        unit_amount: amount_cents,
         currency: 'eur',
         product: product.id,
         metadata: {
           payment_type: paymentType,
           product_type: productType,
           garantie_amount: quoteData.garantieAmount.toString(),
-          siren: quoteData.sirenNumber
+          siren: quoteData.sirenNumber,
+          headcount: headcount.toString()
         }
       };
 

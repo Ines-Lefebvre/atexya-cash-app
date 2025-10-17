@@ -52,6 +52,30 @@ interface Etablissement {
   salaries: number;
 }
 
+export function parseHeadcountLabel(label: string): number | null {
+  if (!label || typeof label !== 'string') return null;
+  
+  const trimmed = label.trim();
+  if (!trimmed) return null;
+  
+  const num = Number(trimmed);
+  if (Number.isInteger(num) && num >= 0) return num;
+  
+  const rangeMatch = trimmed.match(/^(\d+)\s*(?:à|-|–)\s*(\d+)/);
+  if (rangeMatch) {
+    const min = parseInt(rangeMatch[1], 10);
+    const max = parseInt(rangeMatch[2], 10);
+    return Math.floor((min + max) / 2);
+  }
+  
+  const plusMatch = trimmed.match(/^(\d+)\+?$/);
+  if (plusMatch) {
+    return parseInt(plusMatch[1], 10);
+  }
+  
+  return null;
+}
+
 interface PappersResponse {
   company_data: CompanyInfo;
   etablissements: Etablissement[];
@@ -212,14 +236,24 @@ export const searchCompany = api<PappersCompanyRequest, PappersResponse>(
         forme_juridique: companyData.forme_juridique || ""
       };
 
-      const formatted_etablissements: Etablissement[] = etablissements.map(etab => ({
-        siret: etab.siret,
-        nom: etab.denomination_usuelle || etab.nom || company_info.denomination,
-        adresse: etab.adresse?.ligne_1 || company_info.adresse,
-        code_postal: etab.adresse?.code_postal || company_info.code_postal,
-        ville: etab.adresse?.ville || company_info.ville,
-        salaries: etab.effectif || 25 // Valeur par défaut
-      }));
+      const formatted_etablissements: Etablissement[] = etablissements.map(etab => {
+        let salariesCount = 0;
+        if (typeof etab.effectif === 'number' && Number.isInteger(etab.effectif) && etab.effectif > 0) {
+          salariesCount = etab.effectif;
+        } else if (etab.tranche_effectif) {
+          const parsed = parseHeadcountLabel(etab.tranche_effectif);
+          salariesCount = parsed !== null ? parsed : 0;
+        }
+        
+        return {
+          siret: etab.siret,
+          nom: etab.denomination_usuelle || etab.nom || company_info.denomination,
+          adresse: etab.adresse?.ligne_1 || company_info.adresse,
+          code_postal: etab.adresse?.code_postal || company_info.code_postal,
+          ville: etab.adresse?.ville || company_info.ville,
+          salaries: salariesCount
+        };
+      });
 
       safeLog.info("Company search completed successfully", { 
         etablissements_count: formatted_etablissements.length

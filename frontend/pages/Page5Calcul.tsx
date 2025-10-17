@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AppState } from '../App';
 import { useToast } from '@/components/ui/use-toast';
 import backend from '~backend/client';
+import { computePricing } from '@/lib/pricing';
 
 interface Props {
   appState: AppState;
@@ -81,8 +82,9 @@ export default function Page5Calcul({ appState, setAppState }: Props) {
       newErrors.siren = "Le SIREN doit contenir 9 chiffres.";
     }
 
-    if (missingFields.includes('effectif_global') && (!tempData.effectif_global || tempData.effectif_global < 20 || tempData.effectif_global > 100)) {
-      newErrors.effectif_global = "L'effectif doit être entre 20 et 100.";
+    const effectifNum = Number(tempData.effectif_global);
+    if (missingFields.includes('effectif_global') && (!effectifNum || effectifNum < 20 || effectifNum > 100 || !Number.isInteger(effectifNum))) {
+      newErrors.effectif_global = "L'effectif doit être un nombre entier entre 20 et 100.";
     }
 
     if (missingFields.includes('ctn') && (!tempData.ctn || tempData.ctn === 'B')) {
@@ -111,8 +113,9 @@ export default function Page5Calcul({ appState, setAppState }: Props) {
       newErrors.siren = "Le SIREN doit contenir 9 chiffres.";
     }
 
-    if (missingFields.includes('effectif_global') && (!tempData.effectif_global || tempData.effectif_global < 20 || tempData.effectif_global > 100)) {
-      newErrors.effectif_global = "L'effectif doit être entre 20 et 100.";
+    const effectifNum = Number(tempData.effectif_global);
+    if (missingFields.includes('effectif_global') && (!effectifNum || effectifNum < 20 || effectifNum > 100 || !Number.isInteger(effectifNum))) {
+      newErrors.effectif_global = "L'effectif doit être un nombre entier entre 20 et 100.";
     }
 
     if (missingFields.includes('ctn') && (!tempData.ctn || tempData.ctn === 'B')) {
@@ -140,8 +143,13 @@ export default function Page5Calcul({ appState, setAppState }: Props) {
 
   const calculerTarifs = async () => {
     try {
+      const effectifNum = Number(appState.effectif_global);
+      if (!Number.isInteger(effectifNum) || effectifNum <= 0) {
+        throw new Error('Invalid effectif_global');
+      }
+      
       const response = await backend.atexya.calculatePricing({
-        effectif_global: appState.effectif_global,
+        effectif_global: effectifNum,
         ctn: appState.ctn,
         antecedents: appState.antecedents,
         choix_garantie: appState.choix_garantie,
@@ -165,9 +173,12 @@ export default function Page5Calcul({ appState, setAppState }: Props) {
     } catch (error) {
       console.error('Erreur calcul tarifs:', error);
       
-      // Fallback calculation
-      const standard_ttc = 500;
-      const premium_ttc = 650;
+      const effectifNum = Number(appState.effectif_global);
+      const standardCalc = computePricing({ plan: 'standard', billingCycle: 'annual', headcount: effectifNum });
+      const premiumCalc = computePricing({ plan: 'premium', billingCycle: 'annual', headcount: effectifNum });
+      
+      const standard_ttc = standardCalc.priceEUR;
+      const premium_ttc = premiumCalc.priceEUR;
       const ht = standard_ttc / 1.09;
       const taxes = standard_ttc - ht;
       

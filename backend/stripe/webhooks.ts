@@ -105,12 +105,15 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
     await atexya.updateContractStatus({
       contract_id: contractId,
       payment_status: 'paid',
+      stripe_session_id: session.id,
+      stripe_customer_id: session.customer as string,
+      stripe_subscription_id: session.subscription as string || undefined,
+      payment_intent_id: session.payment_intent as string || undefined,
+      stripe_amount_total: session.amount_total || 0,
       metadata: {
-        stripe_session_id: session.id,
-        stripe_customer_id: session.customer as string,
-        stripe_subscription_id: session.subscription as string || undefined,
         payment_type: metadata.payment_type,
-        amount_paid: session.amount_total ? session.amount_total / 100 : 0
+        amount_paid: session.amount_total ? session.amount_total / 100 : 0,
+        payment_completed_at: new Date().toISOString()
       }
     });
 

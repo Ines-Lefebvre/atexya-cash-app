@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Info } from 'lucide-react';
+import { computePricing } from '@/lib/pricing';
 
 interface Props {
   standardPrice: number;
@@ -13,6 +14,7 @@ interface Props {
   promoLabel?: string;
   onPaymentSelect: (paymentType: 'annual' | 'monthly', productType: 'standard' | 'premium') => void;
   isProcessing: boolean;
+  headcount: number;
 }
 
 export default function PaymentOptions({ 
@@ -21,7 +23,8 @@ export default function PaymentOptions({
   promoActive, 
   promoLabel,
   onPaymentSelect,
-  isProcessing 
+  isProcessing,
+  headcount
 }: Props) {
   const [paymentType, setPaymentType] = useState<'annual' | 'monthly'>('annual');
   const [selectedProduct, setSelectedProduct] = useState<'standard' | 'premium'>('standard');
@@ -34,12 +37,14 @@ export default function PaymentOptions({
     }).format(amount);
   };
 
-  const getMonthlyPrice = (annualPrice: number) => {
-    return Math.round((annualPrice * 1.20) / 12 * 100) / 100;
-  };
-
-  const getCurrentPrice = (basePrice: number) => {
-    return paymentType === 'monthly' ? getMonthlyPrice(basePrice) : basePrice;
+  const getCurrentPrice = (plan: 'standard' | 'premium') => {
+    const pricing = computePricing({
+      plan,
+      billingCycle: paymentType,
+      headcount,
+      pricing: { standard_ttc: standardPrice, premium_ttc: premiumPrice }
+    });
+    return pricing.priceEUR;
   };
 
   const handleSubscribe = () => {
@@ -110,7 +115,7 @@ export default function PaymentOptions({
           <CardContent className="text-center space-y-4">
             <div>
               <div className="text-2xl font-bold text-[#c19a5f]">
-                {formatCurrency(getCurrentPrice(standardPrice))}
+                {formatCurrency(getCurrentPrice('standard'))}
                 <span className="text-sm font-normal text-gray-600">
                   {paymentType === 'monthly' ? ' /mois' : ' /an'}
                 </span>
@@ -150,7 +155,7 @@ export default function PaymentOptions({
           <CardContent className="text-center space-y-4">
             <div>
               <div className="text-2xl font-bold text-[#c19a5f]">
-                {formatCurrency(getCurrentPrice(premiumPrice))}
+                {formatCurrency(getCurrentPrice('premium'))}
                 <span className="text-sm font-normal text-gray-600">
                   {paymentType === 'monthly' ? ' /mois' : ' /an'}
                 </span>
@@ -191,7 +196,7 @@ export default function PaymentOptions({
             </div>
             <div className="text-right">
               <p className="text-2xl font-bold text-green-800">
-                {formatCurrency(getCurrentPrice(selectedProduct === 'premium' ? premiumPrice : standardPrice))}
+                {formatCurrency(getCurrentPrice(selectedProduct))}
               </p>
               <p className="text-sm text-green-700">
                 {paymentType === 'monthly' ? 'par mois' : 'pour l\'année'}

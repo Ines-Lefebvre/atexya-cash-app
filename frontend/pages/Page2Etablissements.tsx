@@ -38,14 +38,32 @@ export default function Page2Etablissements({ appState, setAppState }: Props) {
       return;
     }
     
+    const normalizeEtab = (etab: any): Etablissement => {
+      let salariesCount = 0;
+      if (typeof etab.salaries === 'number' && Number.isInteger(etab.salaries) && etab.salaries > 0) {
+        salariesCount = etab.salaries;
+      } else if (typeof etab.salaries === 'string') {
+        const parsed = parseInt(etab.salaries, 10);
+        salariesCount = !isNaN(parsed) && parsed > 0 ? parsed : 0;
+      }
+      
+      return {
+        siret: etab.siret,
+        nom: etab.nom,
+        adresse: etab.adresse,
+        code_postal: etab.code_postal,
+        ville: etab.ville,
+        salaries: salariesCount
+      };
+    };
+    
     const initialEtab = appState.api_failed
       ? { siret: appState.siren + '00019', nom: appState.company_data.denomination, adresse: appState.company_data.adresse, code_postal: appState.company_data.code_postal, ville: appState.company_data.ville, salaries: 0 }
-      : appState.etablissements.length > 0 ? appState.etablissements[0] : null;
+      : appState.etablissements.length > 0 ? normalizeEtab(appState.etablissements[0]) : null;
       
     if (initialEtab) {
       setEtablissements([initialEtab]);
     } else {
-      // Créer un établissement vide basé sur les données de l'entreprise
       const defaultEtab: Etablissement = {
         siret: appState.siren + '00019',
         nom: appState.company_data.denomination,
@@ -88,7 +106,10 @@ export default function Page2Etablissements({ appState, setAppState }: Props) {
   }, [errors, hasValidated]);
 
   const getEffectifGlobal = () => {
-    return etablissements.reduce((total, etab) => total + (etab.salaries || 0), 0);
+    return etablissements.reduce((total, etab) => {
+      const salaries = typeof etab.salaries === 'number' ? etab.salaries : Number(etab.salaries) || 0;
+      return total + salaries;
+    }, 0);
   };
 
   const updateEtablissement = (index: number, field: keyof Etablissement, value: string | number) => {
