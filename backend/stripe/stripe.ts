@@ -7,9 +7,8 @@ import type { AdminAuthData } from "../admin/auth";
 import { safeLog, hashValue } from "../utils/safeLog";
 import { normalizeStripeMetadata } from "../utils/stripeHelpers";
 
-const STRIPE_API_VERSION = "2023-10-16";
 const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
-const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: STRIPE_API_VERSION });
+const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
 
 // Base de données pour les sessions Stripe
 export const stripeDB = new SQLDatabase("stripe", {

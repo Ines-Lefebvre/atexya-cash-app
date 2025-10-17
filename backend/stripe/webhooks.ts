@@ -10,7 +10,7 @@ const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia"
 
 interface WebhookRequest {
   signature: Header<"stripe-signature">;
-  body: string;
+  body: string | Record<string, unknown>;
 }
 
 interface WebhookResponse {
@@ -23,13 +23,12 @@ export const handleWebhook = api<WebhookRequest, WebhookResponse>(
   async (params) => {
     try {
       const signature = params.signature;
-      const body = params.body;
+      const rawBody = typeof params.body === "string" ? params.body : JSON.stringify(params.body ?? {});
 
-      // Vérifier la signature du webhook
       let event: Stripe.Event;
       try {
         event = stripe.webhooks.constructEvent(
-          body,
+          rawBody,
           signature,
           STRIPE_WEBHOOK_SECRET()
         );

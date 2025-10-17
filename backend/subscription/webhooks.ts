@@ -11,7 +11,7 @@ const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia"
 
 interface WebhookRequest {
   signature: Header<"stripe-signature">;
-  body: string;
+  body: string | Record<string, unknown>;
 }
 
 interface WebhookResponse {
@@ -23,11 +23,11 @@ export const handleSubscriptionWebhook = api(
   async (params: WebhookRequest): Promise<WebhookResponse> => {
     try {
       const signature = params.signature;
-      const body = params.body;
+      const rawBody = typeof params.body === "string" ? params.body : JSON.stringify(params.body ?? {});
 
       let event: Stripe.Event;
       try {
-        event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET());
+        event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET());
       } catch (err: any) {
         log.error("Webhook signature verification failed", { error: err.message });
         throw APIError.invalidArgument("Invalid webhook signature");
