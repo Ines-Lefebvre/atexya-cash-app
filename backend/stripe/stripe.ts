@@ -5,9 +5,11 @@ import Stripe from "stripe";
 import { getAuthData } from "~encore/auth";
 import type { AdminAuthData } from "../admin/auth";
 import { safeLog, hashValue } from "../utils/safeLog";
+import { normalizeStripeMetadata } from "../utils/stripeHelpers";
 
+const STRIPE_API_VERSION = "2023-10-16";
 const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
-const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
+const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: STRIPE_API_VERSION });
 
 // Base de données pour les sessions Stripe
 export const stripeDB = new SQLDatabase("stripe", {
@@ -158,22 +160,25 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
 
       const price = await stripe.prices.create(priceParams);
 
-      // Métadonnées complètes pour la session
-      const metadata = {
+      const metadata = normalizeStripeMetadata({
         company_name: quoteData.companyName,
         siren: quoteData.sirenNumber,
-        effectif: quoteData.effectif.toString(),
+        effectif: quoteData.effectif,
         secteur_ctn: quoteData.secteurCTN,
-        garantie_amount: quoteData.garantieAmount.toString(),
+        garantie_amount: quoteData.garantieAmount,
         product_type: productType,
         payment_type: paymentType,
-        has_antecedents: quoteData.hasAntecedents.toString(),
+        has_antecedents: quoteData.hasAntecedents,
         cgv_version: cgvVersion,
         contract_id: contractId || '',
         broker_code: quoteData.brokerCode || ''
-      };
+      });
 
-      // Créer la session Checkout
+      const frontendUrl =
+        process.env.FRONTEND_URL ||
+        process.env.FRONT_URL ||
+        "https://atexya-cash-app-d2vtgnc82vjvosnddaqg.lp.dev";
+
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
         customer: customer.id,
         payment_method_types: ['card', 'sepa_debit'],
@@ -182,9 +187,8 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
           price: price.id,
           quantity: 1
         }],
-        success_url: `${process.env.FRONTEND_URL || 'http://localhost:4000'}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:4000'}/page6`,
-        invoice_creation: { enabled: true },
+        success_url: `${frontendUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontendUrl}/page6`,
         metadata,
         customer_update: {
           address: 'auto',
@@ -194,6 +198,10 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         allow_promotion_codes: false,
         billing_address_collection: 'required'
       };
+
+      if (sessionParams.mode === 'payment') {
+        sessionParams.invoice_creation = { enabled: true };
+      }
 
       const session = await stripe.checkout.sessions.create(sessionParams, {
         idempotencyKey
