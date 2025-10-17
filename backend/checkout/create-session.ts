@@ -3,7 +3,9 @@ import { secret } from "encore.dev/config";
 import Stripe from "stripe";
 import { stripeDB } from "../stripe/stripe";
 import { safeLog, hashValue } from "../utils/safeLog";
+import { normalizeStripeMetadata } from "../utils/stripeHelpers";
 
+const STRIPE_API_VERSION = "2023-10-16";
 const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
 const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
 
@@ -11,7 +13,7 @@ interface CreateCheckoutSessionRequest {
   amount_cents: number;
   currency: string;
   customer_email?: string;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
 }
 
 interface CreateCheckoutSessionResponse {
@@ -23,8 +25,14 @@ export const createCheckoutSession = api(
   async (params: CreateCheckoutSessionRequest): Promise<CreateCheckoutSessionResponse> => {
     const { amount_cents, currency, customer_email, metadata } = params;
 
-    if (!amount_cents || amount_cents <= 0 || typeof amount_cents !== 'number' || !Number.isFinite(amount_cents)) {
-      throw APIError.invalidArgument(`Le montant doit être un nombre supérieur à 0 (en centimes). Reçu: ${amount_cents} (type: ${typeof amount_cents})`);
+    if (
+      !amount_cents ||
+      amount_cents <= 0 ||
+      typeof amount_cents !== "number" ||
+      !Number.isFinite(amount_cents) ||
+      !Number.isInteger(amount_cents)
+    ) {
+      throw APIError.invalidArgument(`Le montant doit être un entier en centimes (>0). Reçu: ${amount_cents}`);
     }
 
     if (!currency || !/^[A-Z]{3}$/i.test(currency)) {
@@ -36,15 +44,20 @@ export const createCheckoutSession = api(
     }
 
     const normalizedCurrency = currency.toLowerCase();
+    const sanitizedMetadata = normalizeStripeMetadata(metadata);
 
     try {
       safeLog.info("Creating checkout session", {
         amount_cents,
         currency: normalizedCurrency,
-        emailHash: customer_email ? hashValue(customer_email) : undefined
+        emailHash: customer_email ? hashValue(customer_email) : undefined,
+        metadata: sanitizedMetadata
       });
 
-      const frontendUrl = process.env.FRONTEND_URL || "https://atexya-cash-app-d2vtgnc82vjvosnddaqg.lp.dev";
+      const frontendUrl =
+        process.env.FRONTEND_URL ||
+        process.env.FRONT_URL ||
+        "https://atexya-cash-app-d2vtgnc82vjvosnddaqg.lp.dev";
 
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
         mode: "payment",
@@ -61,7 +74,7 @@ export const createCheckoutSession = api(
         }],
         success_url: `${frontendUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${frontendUrl}/checkout/cancel`,
-        metadata: metadata || {},
+        metadata: sanitizedMetadata,
       };
 
       if (customer_email) {
