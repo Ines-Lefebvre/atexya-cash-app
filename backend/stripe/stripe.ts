@@ -178,10 +178,15 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         process.env.FRONT_URL ||
         "https://atexya-cash-app-d2vtgnc82vjvosnddaqg.lp.dev";
 
+      const sessionMode: Stripe.Checkout.SessionCreateParams.Mode =
+        paymentType === 'monthly' ? 'subscription' : 'payment';
+      const paymentMethodTypes: Stripe.Checkout.SessionCreateParams.PaymentMethodType[] =
+        sessionMode === 'subscription' ? ['card', 'sepa_debit'] : ['card'];
+
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
         customer: customer.id,
-        payment_method_types: ['card', 'sepa_debit'],
-        mode: paymentType === 'monthly' ? 'subscription' : 'payment',
+        payment_method_types: paymentMethodTypes,
+        mode: sessionMode,
         line_items: [{
           price: price.id,
           quantity: 1
@@ -231,7 +236,11 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
       };
 
     } catch (error: any) {
-      safeLog.error("Error creating Stripe session", { error: error.message });
+      safeLog.error("Error creating Stripe session", {
+        error: error.message,
+        stripeError: error?.raw?.message,
+        stripeErrorType: error?.raw?.type
+      });
       throw APIError.internal("Impossible de créer la session de paiement");
     }
   }
