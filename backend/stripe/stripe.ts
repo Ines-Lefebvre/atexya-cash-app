@@ -1,14 +1,11 @@
 import { api, APIError } from "encore.dev/api";
-import { secret } from "encore.dev/config";
 import { SQLDatabase } from "encore.dev/storage/sqldb";
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { getAuthData } from "~encore/auth";
 import type { AdminAuthData } from "../admin/auth";
 import { safeLog, hashValue } from "../utils/safeLog";
 import { normalizeStripeMetadata } from "../utils/stripeHelpers";
-
-const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
-const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
+import { getStripe, getFrontendUrl } from "./client";
 
 // Base de données pour les sessions Stripe
 export const stripeDB = new SQLDatabase("stripe", {
@@ -71,14 +68,15 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         throw APIError.invalidArgument("Invalid effectif in quoteData: must be a positive integer");
       }
 
-      // Vérifier si une session existe déjà avec cette clé d'idempotence
+      const stripe = getStripe();
+      const frontUrl = getFrontendUrl();
+
       const existingSession = await stripeDB.rawQueryRow<any>(
         `SELECT session_id, customer_id FROM stripe_sessions WHERE idempotency_key = $1 LIMIT 1`,
         idempotencyKey
       );
 
       if (existingSession) {
-        // Récupérer l'URL de la session depuis Stripe
         const session = await stripe.checkout.sessions.retrieve(existingSession.session_id);
         
         safeLog.info("Stripe session already exists for idempotency_key", {
@@ -118,7 +116,6 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         headcount
       });
 
-      // Créer ou récupérer le client Stripe
       let customer: Stripe.Customer;
       const existingCustomers = await stripe.customers.list({
         email: quoteData.customerEmail,
@@ -200,11 +197,6 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
         broker_code: quoteData.brokerCode || ''
       });
 
-      const frontendUrl =
-        process.env.FRONTEND_URL ||
-        process.env.FRONT_URL ||
-        "https://atexya-cash-app-d2vtgnc82vjvosnddaqg.lp.dev";
-
       const sessionMode: Stripe.Checkout.SessionCreateParams.Mode =
         paymentType === 'monthly' ? 'subscription' : 'payment';
       const paymentMethodTypes: Stripe.Checkout.SessionCreateParams.PaymentMethodType[] =
@@ -218,8 +210,8 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
           price: price.id,
           quantity: 1
         }],
-        success_url: `${frontendUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${frontendUrl}/page6`,
+        success_url: `${frontUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontUrl}/page6`,
         metadata,
         customer_update: {
           address: 'auto',
@@ -293,6 +285,7 @@ export const getSession = api<GetSessionRequest, GetSessionResponse>(
   { expose: true, method: "GET", path: "/stripe/session/:sessionId" },
   async (params) => {
     try {
+      const stripe = getStripe();
       const session = await stripe.checkout.sessions.retrieve(params.sessionId);
 
       // Ne retourner QUE le statut du paiement, pas de métadonnées ni d'infos client
@@ -343,6 +336,7 @@ export const createRefund = api<RefundRequest, RefundResponse>(
     }
 
     try {
+      const stripe = getStripe();
       const idempotencyKey = `refund_${params.paymentIntentId}_${Date.now()}`;
       
       const refundParams: Stripe.RefundCreateParams = {

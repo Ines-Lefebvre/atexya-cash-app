@@ -1,12 +1,9 @@
 import { api, APIError } from "encore.dev/api";
-import { secret } from "encore.dev/config";
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { stripeDB } from "../stripe/stripe";
 import { safeLog, hashValue } from "../utils/safeLog";
 import { normalizeStripeMetadata } from "../utils/stripeHelpers";
-
-const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
-const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
+import { getStripe, getFrontendUrl } from "../stripe/client";
 
 interface CreateCheckoutSessionRequest {
   amount_cents: number;
@@ -46,17 +43,15 @@ export const createCheckoutSession = api(
     const sanitizedMetadata = normalizeStripeMetadata(metadata);
 
     try {
+      const stripe = getStripe();
+      const frontUrl = getFrontendUrl();
+
       safeLog.info("Creating checkout session", {
         amount_cents,
         currency: normalizedCurrency,
         emailHash: customer_email ? hashValue(customer_email) : undefined,
         metadata: sanitizedMetadata
       });
-
-      const frontendUrl =
-        process.env.FRONTEND_URL ||
-        process.env.FRONT_URL ||
-        "https://atexya-cash-app-d2vtgnc82vjvosnddaqg.lp.dev";
 
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
         mode: "payment",
@@ -71,8 +66,8 @@ export const createCheckoutSession = api(
           },
           quantity: 1,
         }],
-        success_url: `${frontendUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${frontendUrl}/checkout/cancel`,
+        success_url: `${frontUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontUrl}/checkout/cancel`,
         metadata: sanitizedMetadata,
       };
 

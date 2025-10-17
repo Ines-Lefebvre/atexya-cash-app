@@ -1,12 +1,11 @@
 import { api, APIError, Header } from "encore.dev/api";
 import { secret } from "encore.dev/config";
 import log from "encore.dev/log";
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import { atexya } from "~encore/clients";
+import { getStripe } from "./client";
 
-const STRIPE_SECRET_KEY = secret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = secret("STRIPE_WEBHOOK_SECRET");
-const stripe = new Stripe(STRIPE_SECRET_KEY(), { apiVersion: "2025-02-24.acacia" });
 
 interface WebhookRequest {
   signature: Header<"stripe-signature">;
@@ -25,12 +24,19 @@ export const handleWebhook = api<WebhookRequest, WebhookResponse>(
       const signature = params.signature;
       const rawBody = typeof params.body === "string" ? params.body : JSON.stringify(params.body ?? {});
 
+      const stripe = getStripe();
+      const webhookSecret = STRIPE_WEBHOOK_SECRET();
+      if (!webhookSecret) {
+        log.error("Missing STRIPE_WEBHOOK_SECRET");
+        throw APIError.internal("Webhook secret not configured");
+      }
+
       let event: Stripe.Event;
       try {
         event = stripe.webhooks.constructEvent(
           rawBody,
           signature,
-          STRIPE_WEBHOOK_SECRET()
+          webhookSecret
         );
       } catch (err: any) {
         log.error("Webhook signature verification failed", { error: err.message });
@@ -158,6 +164,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
     const subscription = invoice.subscription;
     if (!subscription) return;
 
+    const stripe = getStripe();
     const subscriptionObj = await stripe.subscriptions.retrieve(subscription as string);
     const metadata = subscriptionObj.metadata || {};
     const contractId = metadata.contract_id;
@@ -194,6 +201,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
     const subscription = invoice.subscription;
     if (!subscription) return;
 
+    const stripe = getStripe();
     const subscriptionObj = await stripe.subscriptions.retrieve(subscription as string);
     const metadata = subscriptionObj.metadata || {};
     const contractId = metadata.contract_id;
