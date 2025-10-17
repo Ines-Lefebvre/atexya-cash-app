@@ -239,9 +239,12 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
       safeLog.error("Error creating Stripe session", {
         error: error.message,
         stripeError: error?.raw?.message,
-        stripeErrorType: error?.raw?.type
+        stripeErrorType: error?.raw?.type,
+        stack: error.stack
       });
-      throw APIError.internal("Impossible de créer la session de paiement");
+      
+      const errorMsg = error?.raw?.message || error?.message || "Impossible de créer la session de paiement";
+      throw APIError.internal(errorMsg);
     }
   }
 );
