@@ -23,12 +23,16 @@ export const createCheckoutSession = api(
   async (params: CreateCheckoutSessionRequest): Promise<CreateCheckoutSessionResponse> => {
     const { amount_cents, currency, customer_email, metadata } = params;
 
-    if (!amount_cents || amount_cents <= 0 || typeof amount_cents !== 'number') {
-      throw APIError.invalidArgument("Le montant doit être un nombre supérieur à 0 (en centimes)");
+    if (!amount_cents || amount_cents <= 0 || typeof amount_cents !== 'number' || !Number.isFinite(amount_cents)) {
+      throw APIError.invalidArgument(`Le montant doit être un nombre supérieur à 0 (en centimes). Reçu: ${amount_cents} (type: ${typeof amount_cents})`);
     }
 
     if (!currency || !/^[A-Z]{3}$/i.test(currency)) {
       throw APIError.invalidArgument("La devise doit être au format ISO (ex: EUR, USD)");
+    }
+
+    if (customer_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer_email)) {
+      throw APIError.invalidArgument("L'adresse email n'est pas valide");
     }
 
     const normalizedCurrency = currency.toLowerCase();

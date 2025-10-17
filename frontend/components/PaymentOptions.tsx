@@ -5,11 +5,6 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Info } from 'lucide-react';
-import { loadStripe } from '@stripe/stripe-js';
-import backend from '~backend/client';
-import { useToast } from '@/components/ui/use-toast';
-
-const stripePromise = loadStripe('pk_test_51QdmBMRqDrYo3Z9pXELw99wNYcvGM1XwIbZ5p0hhPLpjXJMVxJJPQDPbNVWKPBc0f4MsauPJIe5bjvdXRw9krvb300cYLb0UKp');
 
 interface Props {
   standardPrice: number;
@@ -30,8 +25,6 @@ export default function PaymentOptions({
 }: Props) {
   const [paymentType, setPaymentType] = useState<'annual' | 'monthly'>('annual');
   const [selectedProduct, setSelectedProduct] = useState<'standard' | 'premium'>('standard');
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('fr-FR', {
@@ -49,65 +42,8 @@ export default function PaymentOptions({
     return paymentType === 'monthly' ? getMonthlyPrice(basePrice) : basePrice;
   };
 
-  const handleSubscribe = async () => {
-    setLoading(true);
-    
-    try {
-      const testResult = await backend.stripe.testStripeKey();
-      
-      if (!testResult.valid) {
-        toast({
-          title: 'Service indisponible',
-          description: 'Le service de paiement est temporairement indisponible. Veuillez réessayer plus tard.',
-          variant: 'destructive'
-        });
-        setLoading(false);
-        return;
-      }
-
-      const currentPrice = getCurrentPrice(selectedProduct === 'premium' ? premiumPrice : standardPrice);
-      const amountInCents = Math.round(currentPrice * 100);
-      
-      if (!amountInCents || amountInCents <= 0) {
-        throw new Error('Montant invalide');
-      }
-      
-      const { sessionId } = await backend.checkout.createCheckoutSession({
-        amount_cents: amountInCents,
-        currency: 'eur',
-        customer_email: undefined,
-        metadata: {
-          payment_type: paymentType,
-          product_type: selectedProduct
-        }
-      });
-
-      const stripe = await stripePromise;
-      
-      if (!stripe) {
-        throw new Error('Stripe n\'a pas pu être chargé');
-      }
-
-      const { error } = await stripe.redirectToCheckout({ sessionId });
-      
-      if (error) {
-        console.error('Erreur Stripe:', error);
-        toast({
-          title: 'Erreur de paiement',
-          description: error.message || 'Une erreur est survenue lors de la redirection vers le paiement',
-          variant: 'destructive'
-        });
-      }
-    } catch (error: any) {
-      console.error('Erreur lors de la création de la session:', error);
-      toast({
-        title: 'Erreur',
-        description: error.message || 'Impossible de créer la session de paiement',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
+  const handleSubscribe = () => {
+    onPaymentSelect(paymentType, selectedProduct);
   };
 
   return (
@@ -269,10 +205,10 @@ export default function PaymentOptions({
       <div className="flex justify-center pt-4">
         <Button
           onClick={handleSubscribe}
-          disabled={isProcessing || loading}
+          disabled={isProcessing}
           className="bg-[#0f2f47] text-white hover:bg-[#c19a5f] px-8 py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {(isProcessing || loading) ? 'Redirection vers le paiement...' : 'Procéder au paiement sécurisé'}
+          {isProcessing ? 'Redirection vers le paiement...' : 'Procéder au paiement sécurisé'}
         </Button>
       </div>
 

@@ -199,9 +199,11 @@ export default function Page6Offre({ appState, setAppState }: Props) {
     } catch (error: any) {
       console.error('Erreur création session paiement:', error);
       
+      const errorMessage = error?.message || error?.error?.message || "Impossible d'initialiser le paiement. Veuillez réessayer ou contacter le support.";
+      
       toast({
         title: "Erreur de paiement",
-        description: "Impossible d'initialiser le paiement. Veuillez réessayer ou contacter le support.",
+        description: errorMessage,
         variant: "destructive"
       });
       setIsProcessing(false);
