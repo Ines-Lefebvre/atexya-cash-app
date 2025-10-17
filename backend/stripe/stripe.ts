@@ -6,6 +6,7 @@ import type { AdminAuthData } from "../admin/auth";
 import { safeLog, hashValue } from "../utils/safeLog";
 import { normalizeStripeMetadata } from "../utils/stripeHelpers";
 import { getStripe, getFrontendUrl } from "./client";
+import { eurosToCents, normalizeCurrency } from "../utils/currencyUtils";
 
 // Base de données pour les sessions Stripe
 export const stripeDB = new SQLDatabase("stripe", {
@@ -93,7 +94,7 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
 
       const basePrice = productType === 'premium' ? quoteData.pricePremium : quoteData.priceStandard;
       const expectedFinalPrice = paymentType === 'monthly' ? Math.round((basePrice * 1.20) / 12) : basePrice;
-      const expectedAmountCents = Math.round(expectedFinalPrice * 100);
+      const expectedAmountCents = eurosToCents(expectedFinalPrice);
 
       if (Math.abs(amount_cents - expectedAmountCents) > 1) {
         safeLog.error("Amount mismatch detected", {
@@ -101,7 +102,8 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
           expectedAmountCents,
           basePrice,
           paymentType,
-          productType
+          productType,
+          idempotencyKey
         });
         throw APIError.invalidArgument(`Amount mismatch: expected ${expectedAmountCents} cents, received ${amount_cents} cents`);
       }
@@ -163,7 +165,7 @@ export const createPaymentSession = api<CreatePaymentSessionRequest, CreatePayme
 
       const priceParams: Stripe.PriceCreateParams = {
         unit_amount: amount_cents,
-        currency: 'eur',
+        currency: normalizeCurrency('eur'),
         product: product.id,
         metadata: {
           payment_type: paymentType,

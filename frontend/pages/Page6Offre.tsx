@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,10 +34,13 @@ export default function Page6Offre({ appState, setAppState }: Props) {
   
   // Informations client pour le contrat
   const [customerInfo, setCustomerInfo] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: ''
   });
+
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const { siren, tarifs } = appState;
 
@@ -46,8 +49,12 @@ export default function Page6Offre({ appState, setAppState }: Props) {
 
     const newErrors: Record<string, string> = {};
     
-    if (!customerInfo.name.trim()) {
-      newErrors.name = "Votre nom et prénom sont requis.";
+    if (!customerInfo.firstName.trim() || customerInfo.firstName.trim().length < 2) {
+      newErrors.firstName = "Le prénom doit contenir au moins 2 caractères.";
+    }
+
+    if (!customerInfo.lastName.trim() || customerInfo.lastName.trim().length < 2) {
+      newErrors.lastName = "Le nom doit contenir au moins 2 caractères.";
     }
 
     if (!customerInfo.email.trim()) {
@@ -84,8 +91,12 @@ export default function Page6Offre({ appState, setAppState }: Props) {
     
     const newErrors: Record<string, string> = {};
     
-    if (!customerInfo.name.trim()) {
-      newErrors.name = "Votre nom et prénom sont requis.";
+    if (!customerInfo.firstName.trim() || customerInfo.firstName.trim().length < 2) {
+      newErrors.firstName = "Le prénom doit contenir au moins 2 caractères.";
+    }
+
+    if (!customerInfo.lastName.trim() || customerInfo.lastName.trim().length < 2) {
+      newErrors.lastName = "Le nom doit contenir au moins 2 caractères.";
     }
 
     if (!customerInfo.email.trim()) {
@@ -112,7 +123,6 @@ export default function Page6Offre({ appState, setAppState }: Props) {
       return;
     }
 
-    // Stocker les choix et afficher la modal de confirmation
     setSelectedPaymentType(paymentType);
     setSelectedProductType(productType);
     setShowConfirmModal(true);
@@ -141,19 +151,24 @@ export default function Page6Offre({ appState, setAppState }: Props) {
       const isStandard = selectedProductType === 'standard';
       const garantie = isStandard ? appState.choix_garantie : getGarantiePremium();
 
-      const idempotencyKey = `${appState.siren}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = `${appState.siren}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
+      const idempotencyKey = idempotencyKeyRef.current;
+
+      const customerName = `${customerInfo.firstName.trim()} ${customerInfo.lastName.trim()}`;
 
       const contractResponse = await backend.atexya.createContract({
         siren: appState.siren,
         company_name: appState.company_data.denomination,
-        customer_email: customerInfo.email,
-        customer_name: customerInfo.name,
-        customer_phone: customerInfo.phone,
+        customer_email: customerInfo.email.trim(),
+        customer_name: customerName,
+        customer_phone: customerInfo.phone.trim() || undefined,
         contract_type: selectedProductType,
         garantie_amount: garantie,
-        premium_ttc: pricingCalc.amount_cents,
-        premium_ht: Math.round((appState.tarifs.ht || 0) * 100),
-        taxes: Math.round((appState.tarifs.taxes || 0) * 100),
+        premium_ttc: pricingCalc.priceEUR,
+        premium_ht: appState.tarifs.ht || 0,
+        taxes: appState.tarifs.taxes || 0,
         payment_type: selectedPaymentType,
         broker_code: appState.broker_code || undefined,
         broker_commission_percent: appState.broker_code ? 15 : undefined,
@@ -179,9 +194,9 @@ export default function Page6Offre({ appState, setAppState }: Props) {
         priceStandard: appState.tarifs.standard_ttc,
         pricePremium: appState.tarifs.premium_ttc,
         hasAntecedents: appState.antecedents.ip2 > 0 || appState.antecedents.ip3 > 0 || appState.antecedents.ip4 > 0 || appState.antecedents.deces > 0,
-        customerEmail: customerInfo.email,
-        customerName: customerInfo.name,
-        customerPhone: customerInfo.phone,
+        customerEmail: customerInfo.email.trim(),
+        customerName: customerName,
+        customerPhone: customerInfo.phone.trim() || undefined,
         brokerCode: appState.broker_code || undefined
       };
 
@@ -259,8 +274,11 @@ export default function Page6Offre({ appState, setAppState }: Props) {
       
       let isValid = false;
       switch (fieldName) {
-        case 'name':
-          isValid = customerInfo.name.trim() !== '';
+        case 'firstName':
+          isValid = customerInfo.firstName.trim() !== '' && customerInfo.firstName.trim().length >= 2;
+          break;
+        case 'lastName':
+          isValid = customerInfo.lastName.trim() !== '' && customerInfo.lastName.trim().length >= 2;
           break;
         case 'email':
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -397,25 +415,47 @@ export default function Page6Offre({ appState, setAppState }: Props) {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="customer-name" className={`font-bold text-[#0f2f47] ${getLabelClasses('name')}`}>
-                    Nom et prénom *
+                  <Label htmlFor="customer-firstName" className={`font-bold text-[#0f2f47] ${getLabelClasses('firstName')}`}>
+                    Prénom *
                   </Label>
                   <Input
-                    id="customer-name"
-                    value={customerInfo.name}
-                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
-                    onFocus={() => handleFieldFocus('name')}
-                    onBlur={() => handleFieldBlur('name')}
-                    placeholder="Votre nom et prénom"
-                    className={getFieldClasses('name')}
+                    id="customer-firstName"
+                    value={customerInfo.firstName}
+                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, firstName: e.target.value }))}
+                    onFocus={() => handleFieldFocus('firstName')}
+                    onBlur={() => handleFieldBlur('firstName')}
+                    placeholder="Votre prénom"
+                    className={getFieldClasses('firstName')}
                     required
-                    aria-invalid={hasValidated && errors.name ? "true" : "false"}
-                    aria-describedby={hasValidated && errors.name ? "name-error" : undefined}
+                    aria-invalid={hasValidated && errors.firstName ? "true" : "false"}
+                    aria-describedby={hasValidated && errors.firstName ? "firstName-error" : undefined}
                   />
-                  {hasValidated && errors.name && (
-                    <p id="name-error" className="error-text">{errors.name}</p>
+                  {hasValidated && errors.firstName && (
+                    <p id="firstName-error" className="error-text">{errors.firstName}</p>
                   )}
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="customer-lastName" className={`font-bold text-[#0f2f47] ${getLabelClasses('lastName')}`}>
+                    Nom *
+                  </Label>
+                  <Input
+                    id="customer-lastName"
+                    value={customerInfo.lastName}
+                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, lastName: e.target.value }))}
+                    onFocus={() => handleFieldFocus('lastName')}
+                    onBlur={() => handleFieldBlur('lastName')}
+                    placeholder="Votre nom"
+                    className={getFieldClasses('lastName')}
+                    required
+                    aria-invalid={hasValidated && errors.lastName ? "true" : "false"}
+                    aria-describedby={hasValidated && errors.lastName ? "lastName-error" : undefined}
+                  />
+                  {hasValidated && errors.lastName && (
+                    <p id="lastName-error" className="error-text">{errors.lastName}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="customer-email" className={`font-bold text-[#0f2f47] ${getLabelClasses('email')}`}>
                     Email *

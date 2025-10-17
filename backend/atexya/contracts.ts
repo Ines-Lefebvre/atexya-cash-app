@@ -5,6 +5,8 @@ import type { AdminAuthData } from "../admin/auth";
 import { safeLog, hashValue } from "../utils/safeLog";
 import { getStripe, getFrontendUrl } from "../stripe/client";
 import { normalizeStripeMetadata } from "../utils/stripeHelpers";
+import { validateCreateContractInput, type CreateContractInput } from "./validation";
+import { eurosToCents, normalizeCurrency } from "../utils/currencyUtils";
 
 // Base de données pour les contrats
 export const contractsDB = new SQLDatabase("contracts", {
@@ -53,76 +55,7 @@ interface SanitizedContract {
   created_at: string;
 }
 
-interface CreateContractRequest {
-  siren: string;
-  company_name: string;
-  customer_email: string;
-  customer_name: string;
-  customer_phone?: string;
-  contract_type: 'standard' | 'premium';
-  garantie_amount: number;
-  premium_ttc: number;
-  premium_ht: number;
-  taxes: number;
-  payment_type?: 'annual' | 'monthly';
-  broker_code?: string;
-  broker_commission_percent?: number;
-  cgv_version: string;
-  metadata?: Record<string, any>;
-  idempotency_key: string;
-  headcount: number;
-  amount_cents: number;
-  currency?: string;
-}
-
-function validateCreateContractRequest(params: any): { valid: boolean; error?: string } {
-  if (!params.siren || typeof params.siren !== 'string' || params.siren.length !== 9) {
-    return { valid: false, error: 'siren: must be exactly 9 characters' };
-  }
-  if (!params.company_name || typeof params.company_name !== 'string' || params.company_name.length === 0) {
-    return { valid: false, error: 'company_name: must be a non-empty string' };
-  }
-  if (!params.customer_email || typeof params.customer_email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(params.customer_email)) {
-    return { valid: false, error: 'customer_email: must be a valid email' };
-  }
-  if (!params.customer_name || typeof params.customer_name !== 'string' || params.customer_name.length === 0) {
-    return { valid: false, error: 'customer_name: must be a non-empty string' };
-  }
-  if (!['standard', 'premium'].includes(params.contract_type)) {
-    return { valid: false, error: 'contract_type: must be either "standard" or "premium"' };
-  }
-  if (typeof params.garantie_amount !== 'number' || params.garantie_amount <= 0) {
-    return { valid: false, error: 'garantie_amount: must be a positive number' };
-  }
-  if (typeof params.premium_ttc !== 'number' || params.premium_ttc <= 0) {
-    return { valid: false, error: 'premium_ttc: must be a positive number' };
-  }
-  if (typeof params.premium_ht !== 'number' || params.premium_ht <= 0) {
-    return { valid: false, error: 'premium_ht: must be a positive number' };
-  }
-  if (typeof params.taxes !== 'number' || params.taxes < 0) {
-    return { valid: false, error: 'taxes: must be a non-negative number' };
-  }
-  if (!params.cgv_version || typeof params.cgv_version !== 'string' || params.cgv_version.length === 0) {
-    return { valid: false, error: 'cgv_version: must be a non-empty string' };
-  }
-  if (!params.idempotency_key || typeof params.idempotency_key !== 'string' || params.idempotency_key.length === 0) {
-    return { valid: false, error: 'idempotency_key: must be a non-empty string' };
-  }
-  if (!Number.isInteger(params.headcount) || params.headcount <= 0) {
-    return { valid: false, error: 'headcount: must be a positive integer' };
-  }
-  if (!Number.isInteger(params.amount_cents) || params.amount_cents <= 0) {
-    return { valid: false, error: 'amount_cents: must be a positive integer' };
-  }
-  if (params.payment_type && !['annual', 'monthly'].includes(params.payment_type)) {
-    return { valid: false, error: 'payment_type: must be either "annual" or "monthly"' };
-  }
-  if (params.broker_commission_percent !== undefined && (typeof params.broker_commission_percent !== 'number' || params.broker_commission_percent < 0 || params.broker_commission_percent > 100)) {
-    return { valid: false, error: 'broker_commission_percent: must be a number between 0 and 100' };
-  }
-  return { valid: true };
-}
+type CreateContractRequest = CreateContractInput;
 
 interface CreateContractResponse {
   contract_id: string;
@@ -159,11 +92,26 @@ const sanitizeContract = (contract: Contract): SanitizedContract => {
 
 export const createContract = api<CreateContractRequest, CreateContractResponse>(
   { expose: true, method: "POST", path: "/contracts/create" },
-  async (params) => {
-    const validation = validateCreateContractRequest(params);
+  async (rawParams) => {
+    const validation = validateCreateContractInput(rawParams);
     if (!validation.valid) {
       safeLog.warn("Contract validation failed", { error: validation.error });
-      throw APIError.invalidArgument(validation.error || "Invalid payload");
+      throw APIError.invalidArgument(validation.error);
+    }
+    const params = validation.data;
+
+    const amount_cents = eurosToCents(params.premium_ttc);
+    const currency = normalizeCurrency(params.currency);
+
+    if (Math.abs(amount_cents - params.amount_cents) > 1) {
+      safeLog.warn("Amount cents mismatch", {
+        calculated: amount_cents,
+        provided: params.amount_cents,
+        premium_ttc: params.premium_ttc
+      });
+      throw APIError.invalidArgument(
+        `Amount mismatch: calculated ${amount_cents} cents from premium_ttc ${params.premium_ttc}, but received ${params.amount_cents} cents`
+      );
     }
 
     try {
@@ -172,19 +120,31 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
         params.idempotency_key
       );
 
-      if (existingContract?.stripe_session_id) {
-        const stripe = getStripe();
-        const existingSession = await stripe.checkout.sessions.retrieve(existingContract.stripe_session_id);
-        safeLog.info("Contract and session already exist for idempotency_key", {
-          contractId: existingContract.id,
-          sessionId: existingContract.stripe_session_id,
-          idempotencyKey: params.idempotency_key
-        });
-        return {
-          contract_id: existingContract.id,
-          sessionId: existingContract.stripe_session_id,
-          sessionUrl: existingSession.url || ''
-        };
+      if (existingContract) {
+        if (existingContract.stripe_session_id) {
+          const stripe = getStripe();
+          const existingSession = await stripe.checkout.sessions.retrieve(existingContract.stripe_session_id);
+          safeLog.info("Contract and session already exist for idempotency_key", {
+            contractId: existingContract.id,
+            sessionId: existingContract.stripe_session_id,
+            idempotencyKey: params.idempotency_key
+          });
+          return {
+            contract_id: existingContract.id,
+            sessionId: existingContract.stripe_session_id,
+            sessionUrl: existingSession.url || ''
+          };
+        } else {
+          safeLog.info("Contract exists but no Stripe session for idempotency_key", {
+            contractId: existingContract.id,
+            idempotencyKey: params.idempotency_key
+          });
+          return {
+            contract_id: existingContract.id,
+            sessionId: '',
+            sessionUrl: ''
+          };
+        }
       }
 
       const contractId = `CONTRACT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -193,7 +153,7 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
       const endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       const brokerCommissionAmount = params.broker_code && params.broker_commission_percent ?
-        Math.round(params.premium_ttc * (params.broker_commission_percent / 100)) : 0;
+        eurosToCents(params.premium_ttc * (params.broker_commission_percent / 100)) : 0;
 
       const stripe = getStripe();
       const frontUrl = getFrontendUrl();
@@ -214,12 +174,12 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
         payment_method_types: params.payment_type === 'monthly' ? ['card', 'sepa_debit'] : ['card'],
         line_items: [{
           price_data: {
-            currency: params.currency,
+            currency: currency,
             product_data: {
               name: `Garantie Financière AT/MP - ${params.contract_type === 'premium' ? 'Premium' : 'Standard'}`,
               description: `Garantie ${params.garantie_amount.toLocaleString()}€`,
             },
-            unit_amount: params.amount_cents,
+            unit_amount: amount_cents,
             ...(params.payment_type === 'monthly' && {
               recurring: { interval: 'month', interval_count: 1 }
             })
@@ -262,7 +222,7 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
           'pending', ${session.id}, ${null}, ${null},
           ${params.cgv_version},
           ${startDate}, ${endDate}, ${now}, ${now}, ${JSON.stringify(params.metadata || {})}, ${params.idempotency_key},
-          ${params.headcount}, ${params.amount_cents}, ${params.currency}
+          ${params.headcount}, ${amount_cents}, ${currency}
         )
       `;
 
@@ -274,7 +234,8 @@ export const createContract = api<CreateContractRequest, CreateContractResponse>
         paymentType: params.payment_type || 'annual',
         brokerCommission: brokerCommissionAmount,
         headcount: params.headcount,
-        amountCents: params.amount_cents
+        amountCents: amount_cents,
+        currency: currency
       });
 
       return { 
