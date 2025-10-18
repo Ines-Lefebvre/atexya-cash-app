@@ -1,46 +1,41 @@
 interface RateLimitEntry {
-  attempts: number;
-  windowStart: number;
+  timestamps: number[];
 }
 
 const rateLimitMap = new Map<string, RateLimitEntry>();
 
-const RATE_LIMIT_WINDOW = 60 * 1000;
-const MAX_ATTEMPTS = 5;
 const CLEANUP_INTERVAL = 60 * 60 * 1000;
 
 function cleanupOldEntries(): void {
   const now = Date.now();
-  const cutoff = now - RATE_LIMIT_WINDOW;
   
-  for (const [ip, entry] of rateLimitMap.entries()) {
-    if (entry.windowStart < cutoff) {
-      rateLimitMap.delete(ip);
+  for (const [key, entry] of rateLimitMap.entries()) {
+    if (entry.timestamps.length === 0 || entry.timestamps[entry.timestamps.length - 1] < now - CLEANUP_INTERVAL) {
+      rateLimitMap.delete(key);
     }
   }
 }
 
 setInterval(cleanupOldEntries, CLEANUP_INTERVAL);
 
-export function isRateLimited(ip: string): boolean {
+export function checkRateLimit(key: string, maxAttempts: number, windowMs: number): boolean {
   const now = Date.now();
-  const entry = rateLimitMap.get(ip);
+  const cutoff = now - windowMs;
+  
+  let entry = rateLimitMap.get(key);
   
   if (!entry) {
-    rateLimitMap.set(ip, { attempts: 1, windowStart: now });
-    return false;
+    entry = { timestamps: [] };
+    rateLimitMap.set(key, entry);
   }
   
-  if (now - entry.windowStart > RATE_LIMIT_WINDOW) {
-    rateLimitMap.set(ip, { attempts: 1, windowStart: now });
-    return false;
-  }
+  entry.timestamps = entry.timestamps.filter(ts => ts > cutoff);
   
-  entry.attempts++;
+  entry.timestamps.push(now);
   
-  return entry.attempts > MAX_ATTEMPTS;
+  return entry.timestamps.length > maxAttempts;
 }
 
-export function resetRateLimit(ip: string): void {
-  rateLimitMap.delete(ip);
+export function resetRateLimit(key: string): void {
+  rateLimitMap.delete(key);
 }
