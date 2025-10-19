@@ -11,7 +11,7 @@ export async function hashPassword(password: string): Promise<string> {
     throw new Error('Password must be at least 8 characters long');
   }
   
-  const saltRounds = 12;
+  const saltRounds = 12; // Cost factor (plus élevé = plus sécurisé mais plus lent)
   return await bcrypt.hash(password, saltRounds);
 }
 
@@ -54,3 +54,4 @@ export function generateRandomToken(length: number = 32): string {
 export function sha256Hash(data: string): string {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
+```
