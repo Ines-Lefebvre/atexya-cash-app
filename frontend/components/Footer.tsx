@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import LegalModal from './LegalModal';
 import PrivacyModal from './PrivacyModal';
 import CookiePolicyModal from './CookiePolicyModal';
