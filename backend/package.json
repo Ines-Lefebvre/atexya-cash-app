@@ -23,7 +23,3 @@
   }
 }
 ```
-
-**Commit message :**
-```
-fix: replace bcrypt with bcryptjs for better compatibility
