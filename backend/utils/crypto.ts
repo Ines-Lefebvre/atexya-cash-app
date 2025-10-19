@@ -14,12 +14,15 @@ export async function hashPassword(password: string): Promise<string> {
     throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long`);
   }
 
-  try {
-    const hash = await bcrypt.hash(password, BCRYPT_COST_FACTOR);
-    return hash;
-  } catch (error) {
-    throw new Error(`Failed to hash password: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  return new Promise((resolve, reject) => {
+    bcrypt.hash(password, BCRYPT_COST_FACTOR, (err: Error | undefined, hash: string) => {
+      if (err) {
+        reject(new Error(`Failed to hash password: ${err.message}`));
+      } else {
+        resolve(hash);
+      }
+    });
+  });
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
@@ -31,12 +34,15 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
     throw new Error('Hash must be a non-empty string');
   }
 
-  try {
-    const isMatch = await bcrypt.compare(password, hash);
-    return isMatch;
-  } catch (error) {
-    throw new Error(`Failed to verify password: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  return new Promise((resolve, reject) => {
+    bcrypt.compare(password, hash, (err: Error | undefined, result: boolean) => {
+      if (err) {
+        reject(new Error(`Failed to verify password: ${err.message}`));
+      } else {
+        resolve(result);
+      }
+    });
+  });
 }
 
 export function generateRandomToken(length: number = DEFAULT_TOKEN_LENGTH): string {
