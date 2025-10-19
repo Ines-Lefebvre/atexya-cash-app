@@ -1,4 +1,4 @@
-typescriptimport bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 /**
