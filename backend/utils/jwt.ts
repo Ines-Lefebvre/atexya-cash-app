@@ -115,16 +115,16 @@ export function verifyToken(token: string): DecodedToken {
     }
 
     return decoded;
-  } catch (error: any) {
-    if (error.name === 'TokenExpiredError') {
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
       throw new Error('Token has expired');
     }
 
-    if (error.name === 'JsonWebTokenError') {
+    if (error instanceof jwt.JsonWebTokenError) {
       throw new Error(`Invalid token: ${error.message}`);
     }
 
-    if (error.name === 'NotBeforeError') {
+    if (error instanceof jwt.NotBeforeError) {
       throw new Error('Token is not yet valid');
     }
 
