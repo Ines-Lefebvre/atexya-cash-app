@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+typescriptimport bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 /**
@@ -55,60 +55,3 @@ export function sha256Hash(data: string): string {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 ```
-
-**Commit message :**
-```
-fix: update crypto.ts to use bcryptjs
-```
-
-**Commit !**
-
----
-
-## ✅ CHECKLIST
-
-Après avoir fait les 2 commits :
-
-- [ ] backend/package.json modifié (bcryptjs au lieu de bcrypt)
-- [ ] backend/utils/crypto.ts modifié (import bcryptjs)
-- [ ] Les 2 commits faits
-- [ ] Retour sur Leap
-- [ ] Attendre la notification "New commit available"
-- [ ] Cliquer sur "Pull"
-- [ ] Attendre le build (2-3 min)
-- [ ] Vérifier "Build finished without errors"
-
----
-
-## 🚀 APRÈS LES COMMITS
-
-**Leap va :**
-1. ✅ Détecter les 2 commits
-2. ✅ Vous proposer de Pull
-3. ✅ Installer bcryptjs (au lieu de bcrypt)
-4. ✅ Compiler sans erreur
-5. ✅ Déployer automatiquement
-
----
-
-## 💬 DITES-MOI
-
-**Une fois les 2 fichiers modifiés et committed :**
-
-- **"Commits faits ✅"** → Attendez la notification Leap
-- **"Build en cours..."** → OK je surveille avec vous
-- **"Build réussi !"** → 🎉 On vérifie le deploy
-- **"Problème"** → Montrez-moi
-
----
-
-## 📊 CE QUI CHANGE
-
-**Avant (bcrypt - natif C++) :**
-```
-Build → Compile bcrypt → ❌ Erreur compilation
-```
-
-**Après (bcryptjs - JavaScript pur) :**
-```
-Build → Installe bcryptjs → ✅ Aucune compilation nécessaire → Success
